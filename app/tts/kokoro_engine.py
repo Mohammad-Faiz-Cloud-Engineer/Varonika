@@ -14,7 +14,12 @@ class TTSEngine:
         self._queue = queue.Queue()
         self._thread = None
         self._generation = 0
-        self._speaking = threading.Event()
+        # Echo guard ownership: the generation id of the worker that currently
+        # owns the guard, or None. A worker sets it when it dequeues speech and
+        # clears it only if it still owns it. A stale worker (killed by an
+        # interrupt) can never clear the successor's guard, and a stale owner id
+        # never reads as "speaking" because it no longer matches _generation.
+        self._speaking_owner = None
         # After the last audio sample finishes playing, the mic can still pick
         # up the speaker's echo/reverb lingering in the room (typically a few
         # hundred milliseconds). Keep the echo guard up for that tail so the
@@ -36,7 +41,7 @@ class TTSEngine:
                 text = self._queue.get(timeout=0.1)
                 if text is None: # poison pill
                     break
-                self._speaking.set()
+                self._speaking_owner = gen
                 
                 # Generate audio
                 generator = self.pipeline(
@@ -58,25 +63,34 @@ class TTSEngine:
                         if self._stop_event.is_set() or gen != self._generation:
                             break
                         time.sleep(self._reverb_tail_tick)
-                self._speaking.clear()
+                if self._speaking_owner == gen:
+                    self._speaking_owner = None
                 
             except queue.Empty:
                 continue
             except Exception as e:
                 print(f"TTS Error: {e}")
+                if self._speaking_owner == gen:
+                    self._speaking_owner = None
 
     def speak(self, text: str):
         """Enqueue text to be spoken."""
         self._queue.put(text)
 
     def is_speaking(self) -> bool:
-        """True while audio is queued or currently playing (echo guard)."""
-        return self._speaking.is_set() or not self._queue.empty()
+        """True while audio is queued or currently playing (echo guard).
+
+        The guard is owned by the current generation: a stale owner id left
+        behind by an interrupted worker never reads as speaking because it no
+        longer matches _generation.
+        """
+        return self._speaking_owner == self._generation or not self._queue.empty()
 
     def stop_and_clear(self):
         """Interrupts current speech and clears queue."""
         self._stop_event.set()
-        self._speaking.clear()
+        self._generation += 1  # invalidate the running worker before joining
+        self._speaking_owner = None
         sd.stop()
         # clear queue
         while not self._queue.empty():
@@ -92,7 +106,7 @@ class TTSEngine:
 
     def stop(self):
         self._stop_event.set()
-        self._speaking.clear()
+        self._speaking_owner = None
         sd.stop()
         if self._thread:
             self._queue.put(None)

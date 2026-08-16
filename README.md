@@ -50,9 +50,11 @@ First launch checks the models, then starts the desktop window and the backgroun
 
 ## Talking to her
 
-1. Say "Hey Varonika". She switches to listening mode.
+1. Say "Hey Varonika". She answers "Yes Boss" (or "Yes Sir") to confirm she is listening.
 2. Speak your request. She shows what she heard on screen, then sends it to OpenCode.
 3. She speaks the answer while it is displayed in the window.
+
+Wait for her "Yes Boss" ack before speaking, otherwise the start of your command is clipped while she is talking.
 
 You can interrupt her while she is talking by saying the wake word again.
 
@@ -89,7 +91,7 @@ follow_up_timeout_ms: 2000         # after an answer, go back to sleep if you st
 
 ## Troubleshooting
 
-**She hears herself and answers her own voice.** This should not happen anymore. She refuses to transcribe while she is speaking (and for a fraction of a second afterwards, so the speaker's echo in the room is ignored too), and she no longer says "Yes?" after the wake word, so your command is not clipped.
+**She hears herself and answers her own voice.** This should not happen anymore. She refuses to transcribe while she is speaking (and for a fraction of a second afterwards, so the speaker's echo in the room is ignored too), and the "Yes Boss" ack after the wake word is not transcribed.
 
 **OpenCode stops responding after a big answer.** This was a bug in the data line limit. The connection now allows very large messages, so long tool results no longer kill the link.
 

@@ -2,6 +2,7 @@ import asyncio
 import re
 import threading
 import time
+import random
 from app.conversation.state import StateManager, AppState
 from app.audio.capture import AudioCapture
 from app.wakeword.detector import WakeWordDetector
@@ -134,6 +135,7 @@ class ConversationManager:
                 self._clear_follow_up()
                 self.state.set_state(AppState.WAKEWORD_DETECTED)
                 self._emit_ui("System", "Wake word detected!")
+                self.tts.speak(random.choice(["Yes Boss", "Yes Sir"]))
                 self.state.set_state(AppState.LISTENING)
                 self.stt.reset()
                 return
