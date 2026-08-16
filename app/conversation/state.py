@@ -24,7 +24,8 @@ class StateManager:
         return self._state
 
     def add_listener(self, callback):
-        self._listeners.append(callback)
+        with self._lock:
+            self._listeners.append(callback)
 
     def set_state(self, new_state: AppState):
         with self._lock:
@@ -32,8 +33,10 @@ class StateManager:
                 return
             old_state = self._state
             self._state = new_state
-            for callback in self._listeners:
-                try:
-                    callback(old_state, new_state)
-                except Exception as e:
-                    print(f"Error in state listener: {e}")
+            # Snapshot so callbacks run outside the lock (no deadlocks, no stale reads)
+            listeners = list(self._listeners)
+        for callback in listeners:
+            try:
+                callback(old_state, new_state)
+            except Exception as e:
+                print(f"Error in state listener: {e}")

@@ -23,7 +23,10 @@ class AudioCapture:
     def start(self):
         if self.stream is not None:
             return
-        
+
+        if self.p is None:
+            self.p = pyaudio.PyAudio()
+
         self.is_listening = True
         self.stream = self.p.open(
             format=pyaudio.paInt16,
@@ -44,4 +47,6 @@ class AudioCapture:
 
     def close(self):
         self.stop()
-        self.p.terminate()
+        if self.p:
+            self.p.terminate()
+            self.p = None

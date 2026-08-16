@@ -27,3 +27,4 @@ Thumbs.db
 # Local audio artifacts
 *.wav
 *.mp3
+*.bin

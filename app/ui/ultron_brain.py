@@ -51,12 +51,18 @@ class UltronBrain(QWidget):
         elif self.state == AppState.THINKING:
             color = QColor(255, 0, 255)
             pulse_speed = 4.0
+        elif self.state == AppState.EXECUTING_TOOL:
+            color = QColor(255, 102, 0)
+            pulse_speed = 3.0
         elif self.state == AppState.SPEAKING:
             color = QColor(0, 200, 255)
             pulse_speed = max(1, int(2.0 + math.sin(self.time * 2) * 1.5))
         elif self.state == AppState.ERROR:
             color = QColor(255, 0, 0)
             pulse_speed = 0.5
+        elif self.state == AppState.INTERRUPTED:
+            color = QColor(255, 68, 68)
+            pulse_speed = 1.0
         
         w, h = self.width(), self.height()
         center_x, center_y = w / 2, h / 2

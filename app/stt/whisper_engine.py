@@ -1,19 +1,21 @@
 import numpy as np
 from pywhispercpp.model import Model
 import time
+import threading
 
 class STTEngine:
-    def __init__(self, model_path: str, energy_threshold: float = 0.015, silence_timeout: float = 2.5):
+    def __init__(self, model_path: str, energy_threshold: float = 0.015, silence_timeout: float = 2.5, language: str = "en"):
         # pywhispercpp supports ggml formats
         print(f"Loading Whisper model from {model_path}...")
-        self.model = Model(model_path, n_threads=4, print_realtime=False, print_progress=False)
+        self.model = Model(model_path, n_threads=4, print_realtime=False, print_progress=False, language=language)
         self.energy_threshold = energy_threshold
         self.silence_timeout = silence_timeout
-        
+
+        self._lock = threading.Lock()
         self.audio_buffer = []
         self.last_speech_time = time.time()
         self.has_spoken = False
-        
+
         # Calibration state
         self.is_calibrating = False
         self.calibration_buffer = []
@@ -46,36 +48,39 @@ class STTEngine:
                 self.is_calibrating = False
             return False
 
-        self.audio_buffer.append(audio_float)
+        with self._lock:
+            self.audio_buffer.append(audio_float)
+            if energy > self.energy_threshold:
+                self.last_speech_time = time.time()
+                self.has_spoken = True
 
-        if energy > self.energy_threshold:
-            self.last_speech_time = time.time()
-            self.has_spoken = True
-
-        if self.has_spoken and (time.time() - self.last_speech_time > self.silence_timeout):
-            return True # Ready to transcribe
+            if self.has_spoken and (time.time() - self.last_speech_time > self.silence_timeout):
+                return True # Ready to transcribe
         return False
 
     def transcribe(self) -> str:
         """
         Transcribes the current audio buffer and resets it.
         """
-        if not self.audio_buffer:
-            return ""
-        
-        # pywhispercpp expects float32 np array
-        full_audio = np.concatenate(self.audio_buffer)
-        
-        # Reset for next time
-        self.audio_buffer = []
-        self.has_spoken = False
-        self.last_speech_time = time.time()
+        with self._lock:
+            if not self.audio_buffer:
+                return ""
 
+            # pywhispercpp expects float32 np array
+            full_audio = np.concatenate(self.audio_buffer)
+
+            # Reset for next time
+            self.audio_buffer = []
+            self.has_spoken = False
+            self.last_speech_time = time.time()
+
+        # Inference outside the lock — it is slow and reset() must not block on it
         segments = self.model.transcribe(full_audio)
         text = "".join([segment.text for segment in segments]).strip()
         return text
-    
+
     def reset(self):
-        self.audio_buffer = []
-        self.has_spoken = False
-        self.last_speech_time = time.time()
+        with self._lock:
+            self.audio_buffer = []
+            self.has_spoken = False
+            self.last_speech_time = time.time()

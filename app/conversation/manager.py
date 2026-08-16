@@ -21,7 +21,7 @@ class ConversationManager:
 
         self.audio = AudioCapture(chunk_size=1280)
         self.wakeword = WakeWordDetector(config.wake_word_model, config.wake_word_threshold)
-        self.stt = STTEngine(config.stt_model, config.energy_threshold, config.silence_timeout_ms / 1000.0)
+        self.stt = STTEngine(config.stt_model, config.energy_threshold, config.silence_timeout_ms / 1000.0, language=config.stt_language)
         self.tts = TTSEngine(voice=config.tts_voice)
         self.opencode = OpenCodeClient()
 
@@ -67,7 +67,7 @@ class ConversationManager:
         """Stop speech and cancel any in-flight OpenCode request."""
         self._interrupted = True
         self.tts.stop_and_clear()
-        if self._loop:
+        if self._loop and not self._loop.is_closed():
             asyncio.run_coroutine_threadsafe(self.opencode.cancel(), self._loop)
 
     def _emit_ui(self, source: str, message: str):
@@ -94,7 +94,7 @@ class ConversationManager:
         self._emit_ui("System", f"🔧 Tool: {title}")
 
     def _on_audio_chunk(self, chunk):
-        """Audio callback from the microphone — runs on PyAudio thread."""
+        """Audio callback from the microphone — runs on the audio callback thread."""
         current = self.state.current
 
         # Wake word detection during idle/wakeword listening or speaking
@@ -118,21 +118,26 @@ class ConversationManager:
             ready = self.stt.process_chunk(chunk)
             if ready:
                 self.state.set_state(AppState.TRANSCRIBING)
-                text = self.stt.transcribe()
-                text = self._WAKE_PHRASE_RE.sub("", text, count=1).strip()
-                if not text or not text.strip():
-                    self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
-                    return
+                # Whisper inference is slow — never run it on the audio callback thread
+                threading.Thread(target=self._transcribe_and_process, daemon=True).start()
 
-                print(f"User said: {text}")
-                self._emit_ui("User", text)
-                self.state.set_state(AppState.THINKING)
+    def _transcribe_and_process(self):
+        """Transcribe the buffered audio off the audio thread, then handle the command."""
+        text = self.stt.transcribe()
+        text = self._WAKE_PHRASE_RE.sub("", text, count=1).strip()
+        if not text:
+            self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+            return
 
-                # Send to OpenCode on the event loop
-                if self._loop:
-                    asyncio.run_coroutine_threadsafe(
-                        self._process_command(text), self._loop
-                    )
+        print(f"User said: {text}")
+        self._emit_ui("User", text)
+        self.state.set_state(AppState.THINKING)
+
+        # Send to OpenCode on the event loop
+        if self._loop and not self._loop.is_closed():
+            asyncio.run_coroutine_threadsafe(
+                self._process_command(text), self._loop
+            )
 
     def _return_after_interrupt(self):
         """Restore the listening mode after an interrupted prompt."""
@@ -235,5 +240,5 @@ class ConversationManager:
     def stop(self):
         self.audio.stop()
         self.tts.stop()
-        if self._loop:
+        if self._loop and not self._loop.is_closed():
             asyncio.run_coroutine_threadsafe(self.opencode.stop(), self._loop)

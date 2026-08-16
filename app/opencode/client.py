@@ -72,7 +72,9 @@ class VaronikaClient:
 
     async def write_text_file(self, content: str, path: str, session_id: str, **kwargs: Any) -> WriteTextFileResponse | None:
         try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
+            dirname = os.path.dirname(path)
+            if dirname:
+                os.makedirs(dirname, exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
             return WriteTextFileResponse()

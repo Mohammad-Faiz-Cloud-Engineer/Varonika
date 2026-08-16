@@ -101,9 +101,14 @@ class MainWindow(QMainWindow):
             cursor.insertText(message)
             self.chat_view.setTextCursor(cursor)
         elif source == "Varonika":
-            # Final full response — end streaming block
-            self._streaming = False
-            self.chat_view.append("")  # newline
+            # Final full response — end streaming block, or show the text if nothing was streamed
+            if self._streaming:
+                self._streaming = False
+                self.chat_view.append("")  # newline
+            elif message:
+                self.chat_view.append(
+                    f'<span style="color:#4ec9b0; font-weight:bold;">Varonika:</span> {message}'
+                )
         elif source == "User":
             self._streaming = False
             self.chat_view.append(

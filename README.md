@@ -6,7 +6,7 @@ She can open apps, search the web, read files, run commands, and answer question
 
 ## What it does
 
-- Wake word detection ("Hey Varonika") so she is never recording unless you call her
+- Wake word detection ("Hey Varonika") so she only records your speech after you call her
 - Speech to text with Whisper (local, no cloud)
 - Talks to OpenCode, which runs on your machine too
 - Text to speech with Kokoro, so you hear the answer, not just read it
@@ -72,8 +72,6 @@ silence_timeout_ms: 2500           # pause before she stops listening
 energy_threshold: 0.015            # mic sensitivity
 tts_voice: "af_bella"              # Kokoro voice
 continuous_mode: true              # keep listening after each answer
-conversation_timeout: 8
-opencode_port: 8080
 ```
 
 ## How it fits together
@@ -100,4 +98,4 @@ The first run downloads the Kokoro voice model and may take a little while. Be p
 
 ## License
 
-Private project. Use it, change it, break it, fix it.
+BSD 2-Clause License. Copyright (c) 2026, Mohammad Faiz. See [LICENSE](LICENSE) for the full text.

@@ -15,8 +15,6 @@ class Config:
     energy_threshold: float = 0.015
     tts_voice: str = "af_bella"
     continuous_mode: bool = True
-    conversation_timeout: int = 8
-    opencode_port: int = 8080
 
 def _resolve_model_path(path: str) -> str:
     """Anchor relative model paths to the project root regardless of CWD."""
