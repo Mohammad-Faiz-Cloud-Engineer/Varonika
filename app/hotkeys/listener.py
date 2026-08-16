@@ -20,3 +20,6 @@ class HotkeyListener:
         elif current in [AppState.THINKING, AppState.EXECUTING_TOOL]:
             print("Hotkey pressed: Interrupting current task.")
             self.manager.interrupt()
+
+    def stop(self):
+        keyboard.unhook_all()

@@ -31,6 +31,7 @@ class ConversationManager:
         self.ui_callback = None
         self._loop = None
         self._opencode_started = False
+        self.hotkeys = None
 
         # Wire up streaming callbacks
         self.opencode.varonika_client.on_text_chunk = self._on_stream_text
@@ -297,12 +298,16 @@ class ConversationManager:
     def stop(self):
         self.audio.stop()
         self.tts.stop()
+        if self.hotkeys:
+            self.hotkeys.stop()
         if self._loop and not self._loop.is_closed():
             asyncio.run_coroutine_threadsafe(self.opencode.stop(), self._loop)
 
     async def stop_async(self):
         self.audio.stop()
         self.tts.stop()
+        if self.hotkeys:
+            self.hotkeys.stop()
         try:
             await asyncio.wait_for(self.opencode.stop(), timeout=1.0)
         except Exception:

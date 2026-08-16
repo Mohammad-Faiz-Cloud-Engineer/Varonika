@@ -115,7 +115,7 @@ class MainWindow(QMainWindow):
 
     def _markdown_fragment(self, text):
         return QTextDocumentFragment.fromMarkdown(
-            html.escape(text),
+            text,
             QTextDocument.MarkdownFeature.MarkdownDialectGitHub,
         )
 
