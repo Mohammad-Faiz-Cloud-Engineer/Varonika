@@ -294,3 +294,11 @@ class ConversationManager:
         self.tts.stop()
         if self._loop and not self._loop.is_closed():
             asyncio.run_coroutine_threadsafe(self.opencode.stop(), self._loop)
+
+    async def stop_async(self):
+        self.audio.stop()
+        self.tts.stop()
+        try:
+            await asyncio.wait_for(self.opencode.stop(), timeout=1.0)
+        except Exception:
+            pass

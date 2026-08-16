@@ -56,7 +56,7 @@ class STTEngine:
                 self.has_spoken = True
                 self.speech_seen = True
 
-            if self.has_spoken and (time.time() - self.last_speech_time > self.silence_timeout):
+            if time.time() - self.last_speech_time > self.silence_timeout:
                 return True # Ready to transcribe
         return False
 
@@ -65,7 +65,11 @@ class STTEngine:
         Transcribes the current audio buffer and resets it.
         """
         with self._lock:
-            if not self.audio_buffer:
+            if not self.audio_buffer or not self.speech_seen:
+                self.audio_buffer = []
+                self.has_spoken = False
+                self.speech_seen = False
+                self.last_speech_time = time.time()
                 return ""
 
             # pywhispercpp expects float32 np array

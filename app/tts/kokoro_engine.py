@@ -89,7 +89,7 @@ class TTSEngine:
     def stop_and_clear(self):
         """Interrupts current speech and clears queue."""
         self._stop_event.set()
-        self._generation += 1  # invalidate the running worker before joining
+        self._generation += 1  # invalidate the running worker
         self._speaking_owner = None
         sd.stop()
         # clear queue
@@ -99,9 +99,7 @@ class TTSEngine:
             except queue.Empty:
                 break
         
-        # restart worker immediately
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=1.0)
+        # restart worker immediately (orphan the old thread so audio callback isn't blocked)
         self.start_worker()
 
     def stop(self):

@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QAction, QIcon, QTextCursor, QTextDocument, QTextDocumentFragment
 from PySide6.QtCore import Signal
+import qasync
 from app.ui.ultron_brain import UltronBrain
 from app.conversation.state import AppState
 
@@ -137,11 +138,11 @@ class MainWindow(QMainWindow):
             # Final full response — replace the streamed text with rendered Markdown,
             # or append the text if nothing was streamed
             if self._stream_start is not None:
+                cursor = self.chat_view.textCursor()
+                cursor.setPosition(self._stream_start)
+                cursor.setPosition(self._stream_end, QTextCursor.MoveMode.KeepAnchor)
+                cursor.removeSelectedText()
                 if message:
-                    cursor = self.chat_view.textCursor()
-                    cursor.setPosition(self._stream_start)
-                    cursor.setPosition(self._stream_end, QTextCursor.MoveMode.KeepAnchor)
-                    cursor.removeSelectedText()
                     cursor.insertFragment(self._markdown_fragment(message))
                 self._stream_start = None
                 self._stream_end = None
@@ -193,6 +194,7 @@ class MainWindow(QMainWindow):
         self.hide()
         self.tray.showMessage("Varonika", "Varonika is running in the background.")
 
-    def close_app(self):
-        self.manager.stop()
+    @qasync.asyncSlot()
+    async def close_app(self):
+        await self.manager.stop_async()
         QApplication.quit()
