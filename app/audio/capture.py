@@ -58,15 +58,21 @@ class AudioCapture:
             self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
             self.worker_thread.start()
 
-        self.stream = self.p.open(
-            format=pyaudio.paInt16,
-            channels=1,
-            rate=self.sample_rate,
-            input=True,
-            frames_per_buffer=self.chunk_size,
-            stream_callback=self._audio_callback
-        )
-        self.stream.start_stream()
+        try:
+            self.stream = self.p.open(
+                format=pyaudio.paInt16,
+                channels=1,
+                rate=self.sample_rate,
+                input=True,
+                frames_per_buffer=self.chunk_size,
+                stream_callback=self._audio_callback
+            )
+            self.stream.start_stream()
+        except Exception as e:
+            print(f"Error opening audio stream: {e}")
+            self.is_listening = False
+            self.stream = None
+            self._stop_event.set()
 
     def stop(self):
         self.is_listening = False

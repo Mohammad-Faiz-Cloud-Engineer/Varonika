@@ -33,7 +33,13 @@ def load_config() -> Config:
                 data = yaml.safe_load(f) or {}
                 for k, v in data.items():
                     if hasattr(c, k):
-                        setattr(c, k, v)
+                        default_val = getattr(c, k)
+                        expected_type = type(default_val)
+                        try:
+                            cast_val = expected_type(v)
+                            setattr(c, k, cast_val)
+                        except (ValueError, TypeError):
+                            print(f"Warning: Could not cast config '{k}' value '{v}' to {expected_type.__name__}. Using default.")
     except Exception as e:
         print(f"Error loading config: {e}")
     c.wake_word_model = _resolve_model_path(c.wake_word_model)
