@@ -145,12 +145,14 @@ class ConversationManager:
             if current == AppState.SPEAKING and not self.tts.is_speaking():
                 if self._follow_up_active:
                     self.state.set_state(AppState.LISTENING)
+                    self.stt.reset()
                 else:
                     self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
 
         # STT during active listening
         if current == AppState.LISTENING:
             if self.tts.is_speaking():
+                self.stt.reset()
                 return  # echo guard: don't transcribe our own speech
 
             # Follow-up window: after an answer she listens for a short while.
@@ -177,6 +179,10 @@ class ConversationManager:
     def _transcribe_and_process(self):
         """Transcribe the buffered audio off the audio thread, then handle the command."""
         text = self.stt.transcribe()
+        
+        # Remove Whisper noise/silence hallucinations like [BLANK_AUDIO] or (wind blowing)
+        text = re.sub(r'\[.*?\]|\(.*?\)|\*.*?\*', '', text)
+        
         text = self._WAKE_PHRASE_RE.sub("", text, count=1).strip()
         if not text:
             self._clear_follow_up()

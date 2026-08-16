@@ -13,7 +13,7 @@ class STTEngine:
 
         self._lock = threading.Lock()
         self.audio_buffer = []
-        self.last_speech_time = time.time()
+        self.last_speech_time = time.monotonic()
         self.speech_seen = False
 
         # Calibration state
@@ -51,10 +51,10 @@ class STTEngine:
         with self._lock:
             self.audio_buffer.append(audio_float)
             if energy > self.energy_threshold:
-                self.last_speech_time = time.time()
+                self.last_speech_time = time.monotonic()
                 self.speech_seen = True
 
-            if time.time() - self.last_speech_time > self.silence_timeout:
+            if time.monotonic() - self.last_speech_time > self.silence_timeout:
                 return True # Ready to transcribe
         return False
 
@@ -66,7 +66,7 @@ class STTEngine:
             if not self.audio_buffer or not self.speech_seen:
                 self.audio_buffer = []
                 self.speech_seen = False
-                self.last_speech_time = time.time()
+                self.last_speech_time = time.monotonic()
                 return ""
 
             # pywhispercpp expects float32 np array
@@ -75,7 +75,7 @@ class STTEngine:
             # Reset for next time
             self.audio_buffer = []
             self.speech_seen = False
-            self.last_speech_time = time.time()
+            self.last_speech_time = time.monotonic()
 
         # Inference outside the lock — it is slow and reset() must not block on it
         segments = self.model.transcribe(full_audio)
@@ -86,4 +86,4 @@ class STTEngine:
         with self._lock:
             self.audio_buffer = []
             self.speech_seen = False
-            self.last_speech_time = time.time()
+            self.last_speech_time = time.monotonic()
