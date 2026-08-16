@@ -54,10 +54,11 @@ First launch checks the models, then starts the desktop window and the backgroun
 
 You can interrupt her while she is talking by saying the wake word again.
 
+After she answers she keeps listening for a short follow-up question. If you stay quiet for about 2 seconds (see `follow_up_timeout_ms`), she stops listening and goes back to sleep until you say the wake word again.
+
 ### Hotkeys
 
 - `Alt+Space`: activate listening mode without using the wake word
-- `Alt+T`: toggle between wake word mode and continuous listening mode
 
 ## Configuration
 
@@ -71,7 +72,7 @@ stt_language: "en"
 silence_timeout_ms: 2500           # pause before she stops listening
 energy_threshold: 0.015            # mic sensitivity
 tts_voice: "af_bella"              # Kokoro voice
-continuous_mode: true              # keep listening after each answer
+follow_up_timeout_ms: 2000         # after an answer, go back to sleep if you stay silent this long
 ```
 
 ## How it fits together
@@ -86,7 +87,7 @@ continuous_mode: true              # keep listening after each answer
 
 ## Troubleshooting
 
-**She hears herself and answers her own voice.** This should not happen anymore. She refuses to transcribe while she is speaking, and she no longer says "Yes?" after the wake word, so your command is not clipped.
+**She hears herself and answers her own voice.** This should not happen anymore. She refuses to transcribe while she is speaking (and for a fraction of a second afterwards, so the speaker's echo in the room is ignored too), and she no longer says "Yes?" after the wake word, so your command is not clipped.
 
 **OpenCode stops responding after a big answer.** This was a bug in the data line limit. The connection now allows very large messages, so long tool results no longer kill the link.
 

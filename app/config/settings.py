@@ -14,7 +14,7 @@ class Config:
     silence_timeout_ms: int = 2500
     energy_threshold: float = 0.015
     tts_voice: str = "af_bella"
-    continuous_mode: bool = True
+    follow_up_timeout_ms: int = 2000
 
 def _resolve_model_path(path: str) -> str:
     """Anchor relative model paths to the project root regardless of CWD."""

@@ -15,6 +15,7 @@ class STTEngine:
         self.audio_buffer = []
         self.last_speech_time = time.time()
         self.has_spoken = False
+        self.speech_seen = False
 
         # Calibration state
         self.is_calibrating = False
@@ -53,6 +54,7 @@ class STTEngine:
             if energy > self.energy_threshold:
                 self.last_speech_time = time.time()
                 self.has_spoken = True
+                self.speech_seen = True
 
             if self.has_spoken and (time.time() - self.last_speech_time > self.silence_timeout):
                 return True # Ready to transcribe
@@ -72,6 +74,7 @@ class STTEngine:
             # Reset for next time
             self.audio_buffer = []
             self.has_spoken = False
+            self.speech_seen = False
             self.last_speech_time = time.time()
 
         # Inference outside the lock — it is slow and reset() must not block on it
@@ -83,4 +86,5 @@ class STTEngine:
         with self._lock:
             self.audio_buffer = []
             self.has_spoken = False
+            self.speech_seen = False
             self.last_speech_time = time.time()

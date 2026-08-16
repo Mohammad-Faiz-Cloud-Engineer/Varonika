@@ -2,6 +2,7 @@ import sounddevice as sd
 from kokoro import KPipeline
 import queue
 import threading
+import time
 
 class TTSEngine:
     def __init__(self, voice="af_bella", speed=1.0):
@@ -14,6 +15,12 @@ class TTSEngine:
         self._thread = None
         self._generation = 0
         self._speaking = threading.Event()
+        # After the last audio sample finishes playing, the mic can still pick
+        # up the speaker's echo/reverb lingering in the room (typically a few
+        # hundred milliseconds). Keep the echo guard up for that tail so the
+        # assistant never transcribes (or reacts to) her own voice.
+        self._reverb_tail_tick = 0.05
+        self._reverb_tail_ticks = 6  # 300 ms total, checked every 50 ms
 
     def start_worker(self):
         self._stop_event.clear()
@@ -43,6 +50,14 @@ class TTSEngine:
                     # audio is a numpy array at 24000 sample rate
                     sd.play(audio, 24000)
                     sd.wait() # wait for this chunk to finish playing
+                # Reverb tail: only wait after the final sentence (queue empty),
+                # so inter-sentence streaming is not slowed down. Interruptible
+                # so a hotkey stop still responds immediately.
+                if self._queue.empty() and not self._stop_event.is_set():
+                    for _ in range(self._reverb_tail_ticks):
+                        if self._stop_event.is_set() or gen != self._generation:
+                            break
+                        time.sleep(self._reverb_tail_tick)
                 self._speaking.clear()
                 
             except queue.Empty:

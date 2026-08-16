@@ -1,6 +1,7 @@
 import asyncio
 import re
 import threading
+import time
 from app.conversation.state import StateManager, AppState
 from app.audio.capture import AudioCapture
 from app.wakeword.detector import WakeWordDetector
@@ -38,6 +39,12 @@ class ConversationManager:
         self._speaking_lock = threading.Lock()
         self._interrupted = False
 
+        # Post-answer follow-up window: after she answers she keeps listening
+        # briefly; if the user says nothing, she goes back to sleep.
+        self._follow_up_active = False
+        self._follow_up_deadline = None
+        self._follow_up_timeout = config.follow_up_timeout_ms / 1000.0
+
     def start(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
         self.tts.start_worker()
@@ -62,6 +69,21 @@ class ConversationManager:
 
     def set_ui_callback(self, cb):
         self.ui_callback = cb
+
+    def activate_listening(self):
+        """Enter listening mode from the hotkey: no follow-up timeout, waits as long as needed."""
+        self._clear_follow_up()
+        self.state.set_state(AppState.LISTENING)
+        self.stt.reset()
+
+    def _arm_follow_up(self):
+        """After an answer, listen briefly for a follow-up, then go back to sleep."""
+        self._follow_up_active = True
+        self._follow_up_deadline = None
+
+    def _clear_follow_up(self):
+        self._follow_up_active = False
+        self._follow_up_deadline = None
 
     def interrupt(self):
         """Stop speech and cancel any in-flight OpenCode request."""
@@ -99,22 +121,52 @@ class ConversationManager:
 
         # Wake word detection during idle/wakeword listening or speaking
         if current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING]:
+            if self.stt.is_calibrating:
+                # Calibration must consume real audio or it never completes:
+                # it runs only while she listens for the wake word.
+                self.stt.process_chunk(chunk)
             if self.wakeword.process_chunk(chunk):
                 print("Wake word detected!")
                 if current == AppState.SPEAKING:
                     self.interrupt()
                     self.state.set_state(AppState.INTERRUPTED)
 
+                self._clear_follow_up()
                 self.state.set_state(AppState.WAKEWORD_DETECTED)
                 self._emit_ui("System", "🎤 Wake word detected!")
                 self.state.set_state(AppState.LISTENING)
                 self.stt.reset()
                 return
 
+            # Answer finished: once she actually stops talking, open the
+            # follow-up listening window. (She shows "Speaking" while the
+            # answer plays, not "Listening".)
+            if current == AppState.SPEAKING and not self.tts.is_speaking():
+                if self._follow_up_active:
+                    self.state.set_state(AppState.LISTENING)
+                else:
+                    self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+
         # STT during active listening
         if current == AppState.LISTENING:
             if self.tts.is_speaking():
                 return  # echo guard: don't transcribe our own speech
+
+            # Follow-up window: after an answer she listens for a short while.
+            # Any speech cancels the window; silence past the deadline puts her
+            # back to sleep. Her own voice never reaches this code: the TTS
+            # echo guard stays up for ~300ms after playback (reverb tail).
+            if self._follow_up_active:
+                if self._follow_up_deadline is None:
+                    self._follow_up_deadline = time.monotonic() + self._follow_up_timeout
+                elif self.stt.speech_seen:
+                    self._clear_follow_up()
+                elif time.monotonic() > self._follow_up_deadline:
+                    self._clear_follow_up()
+                    self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+                    self.stt.reset()
+                    return
+
             ready = self.stt.process_chunk(chunk)
             if ready:
                 self.state.set_state(AppState.TRANSCRIBING)
@@ -126,6 +178,7 @@ class ConversationManager:
         text = self.stt.transcribe()
         text = self._WAKE_PHRASE_RE.sub("", text, count=1).strip()
         if not text:
+            self._clear_follow_up()
             self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
             return
 
@@ -140,19 +193,18 @@ class ConversationManager:
             )
 
     def _return_after_interrupt(self):
-        """Restore the listening mode after an interrupted prompt."""
+        """Restore listening mode after an interrupted prompt (hotkey activation: no follow-up window)."""
         if self.state.current in [AppState.THINKING, AppState.EXECUTING_TOOL]:
-            if self.config.continuous_mode:
-                self.state.set_state(AppState.LISTENING)
-                self.stt.reset()
-            else:
-                self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+            self._clear_follow_up()
+            self.state.set_state(AppState.LISTENING)
+            self.stt.reset()
 
     async def _process_command(self, text: str):
         self._interrupted = False
         if not self._opencode_started:
             self.tts.speak("OpenCode isn't available right now.")
             self._emit_ui("Varonika", "OpenCode isn't available right now.")
+            self._clear_follow_up()
             self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
             return
             
@@ -169,12 +221,10 @@ class ConversationManager:
             except Exception as e:
                 self.tts.speak("I couldn't reset the session.")
                 self._emit_ui("System", f"Reset failed: {e}")
-                
-            if self.config.continuous_mode:
-                self.state.set_state(AppState.LISTENING)
-                self.stt.reset()
-            else:
-                self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+
+            self._arm_follow_up()
+            self.state.set_state(AppState.SPEAKING)
+            self.stt.reset()
             return
 
         self._stream_buffer = ""
@@ -190,6 +240,7 @@ class ConversationManager:
             print(f"OpenCode error: {e}")
             self.tts.speak("Sorry, there was an error communicating with OpenCode.")
             self._emit_ui("Varonika", f"Error: {e}")
+            self._clear_follow_up()
             self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
             return
 
@@ -210,12 +261,11 @@ class ConversationManager:
         # Show full response in UI
         self._emit_ui("Varonika", full_response)
 
-        # After speaking, return to appropriate mode
-        if self.config.continuous_mode:
-            self.state.set_state(AppState.LISTENING)
-            self.stt.reset()
-        else:
-            self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+        # Listen briefly for a follow-up once she finishes speaking, then go
+        # back to wake word mode. She shows "Speaking" while the answer plays;
+        # the audio callback switches her to "Listening" when TTS goes idle.
+        self._arm_follow_up()
+        self.stt.reset()
 
     def _format_speech(self, text: str) -> str:
         """Convert raw LLM output into speakable text."""
