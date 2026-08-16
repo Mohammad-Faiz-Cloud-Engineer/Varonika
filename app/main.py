@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.config.settings import load_config
 from app.conversation.state import StateManager
 from app.conversation.manager import ConversationManager
-from app.ui.main_window import MainWindow
+from app.ui.main_window import MainWindow, load_app_icon
 from app.hotkeys.listener import HotkeyListener
 
 
@@ -32,6 +32,10 @@ def main():
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+
+    app_icon = load_app_icon()
+    if not app_icon.isNull():
+        app.setWindowIcon(app_icon)
 
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)

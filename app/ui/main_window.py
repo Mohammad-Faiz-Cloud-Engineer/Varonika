@@ -1,12 +1,31 @@
 import html
+from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QTextEdit, QLabel, QSystemTrayIcon, QMenu, QApplication
 )
-from PySide6.QtGui import QAction, QTextCursor, QTextDocument, QTextDocumentFragment
+from PySide6.QtGui import QAction, QIcon, QTextCursor, QTextDocument, QTextDocumentFragment
 from PySide6.QtCore import Signal
 from app.ui.ultron_brain import UltronBrain
 from app.conversation.state import AppState
+
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
+
+
+def load_app_icon() -> QIcon:
+    """Build the app icon from the logo assets.
+
+    The multi-size .ico is preferred on Windows (taskbar + tray need small
+    sizes); the high-res .png covers Linux and macOS. Both are added to one
+    QIcon so Qt picks the best match per platform. Returns a null icon if no
+    logo files exist, so callers can fall back.
+    """
+    icon = QIcon()
+    for name in ("logo.ico", "logo.png"):
+        path = ASSETS_DIR / name
+        if path.exists():
+            icon.addFile(str(path))
+    return icon
 
 
 class MainWindow(QMainWindow):
@@ -65,11 +84,14 @@ class MainWindow(QMainWindow):
         self._stream_start = None
         self._stream_end = None
 
-        # System Tray
-        self.tray = QSystemTrayIcon(self)
-        from PySide6.QtWidgets import QStyle
-        icon = QApplication.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
-        self.tray.setIcon(icon)
+        # Window + tray icon (Varonika logo; falls back to a stock icon
+        # if the logo files are missing)
+        app_icon = load_app_icon()
+        if app_icon.isNull():
+            from PySide6.QtWidgets import QStyle
+            app_icon = QApplication.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+        self.setWindowIcon(app_icon)
+        self.tray = QSystemTrayIcon(app_icon, self)
 
         tray_menu = QMenu()
         show_action = QAction("Open Varonika", self)
