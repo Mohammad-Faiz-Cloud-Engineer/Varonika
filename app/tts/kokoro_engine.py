@@ -36,8 +36,12 @@ class TTSEngine:
         self._thread = threading.Thread(target=self._worker, args=(gen,), daemon=True)
         self._thread.start()
 
-    def _worker(self, gen):
-        while not self._stop_event.is_set() and gen == self._generation:
+    def _worker(self, gen: int):
+        print(f"TTS Worker {gen} started.")
+        while True:
+            with self._lock:
+                if gen != self._generation:
+                    break
             try:
                 # Get the next sentence to speak
                 text = self._queue.get(timeout=0.1)

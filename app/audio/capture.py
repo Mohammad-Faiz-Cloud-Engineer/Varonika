@@ -20,7 +20,7 @@ class AudioCapture:
         self.callbacks.append(callback)
 
     def _audio_callback(self, in_data, frame_count, time_info, status):
-        audio_np = np.frombuffer(in_data, dtype=np.int16)
+        audio_np = np.frombuffer(in_data, dtype=np.int16).copy()
         if self.is_listening:
             # Put audio data in the queue to be processed by the background worker.
             # This prevents blocking the real-time audio thread.
