@@ -38,6 +38,8 @@ This fetches:
 
 If you have your own trained wake word model, drop it at the project root as `Hey_Varonika.onnx` and the script will copy it into place. Without a custom model, the script downloads a placeholder that responds to "Hey Jarvis" instead.
 
+To choose which LLM she uses (including your own custom model), see [LLM_SETUP.md](LLM_SETUP.md).
+
 ## Running
 
 ```bash
