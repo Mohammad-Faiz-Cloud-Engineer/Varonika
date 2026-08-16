@@ -1,8 +1,9 @@
+import html
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QTextEdit, QLabel, QSystemTrayIcon, QMenu, QApplication
 )
-from PySide6.QtGui import QAction, QTextCursor
+from PySide6.QtGui import QAction, QTextCursor, QTextDocument, QTextDocumentFragment
 from PySide6.QtCore import Signal
 from app.ui.ultron_brain import UltronBrain
 from app.conversation.state import AppState
@@ -60,8 +61,9 @@ class MainWindow(QMainWindow):
         self.manager.set_ui_callback(self._thread_safe_emit)
         self.manager.state.add_listener(self._thread_safe_state)
 
-        # Track streaming state
-        self._streaming = False
+        # Track streaming state (cursor range of the streamed text)
+        self._stream_start = None
+        self._stream_end = None
 
         # System Tray
         self.tray = QSystemTrayIcon(self)
@@ -88,35 +90,55 @@ class MainWindow(QMainWindow):
     def _thread_safe_state(self, old_state, new_state):
         self.state_signal.emit(new_state)
 
+    def _markdown_fragment(self, text):
+        return QTextDocumentFragment.fromMarkdown(
+            html.escape(text),
+            QTextDocument.MarkdownFeature.MarkdownDialectGitHub,
+        )
+
     def _on_ui_message(self, source, message):
         if source == "Varonika_stream":
-            # Streaming chunk — append without newline
-            if not self._streaming:
-                self._streaming = True
+            # Streaming chunk — append to the stream block (not document end,
+            # so System notes appended mid-stream are never polluted)
+            if self._stream_start is None:
                 self.chat_view.append(
                     '<span style="color:#4ec9b0; font-weight:bold;">Varonika:</span> '
                 )
+                self._stream_start = self.chat_view.textCursor().position()
+                self._stream_end = self._stream_start
             cursor = self.chat_view.textCursor()
-            cursor.movePosition(QTextCursor.MoveOperation.End)
+            cursor.setPosition(self._stream_end)
             cursor.insertText(message)
+            self._stream_end = cursor.position()
             self.chat_view.setTextCursor(cursor)
         elif source == "Varonika":
-            # Final full response — end streaming block, or show the text if nothing was streamed
-            if self._streaming:
-                self._streaming = False
-                self.chat_view.append("")  # newline
+            # Final full response — replace the streamed text with rendered Markdown,
+            # or append the text if nothing was streamed
+            if self._stream_start is not None:
+                if message:
+                    cursor = self.chat_view.textCursor()
+                    cursor.setPosition(self._stream_start)
+                    cursor.setPosition(self._stream_end, QTextCursor.MoveMode.KeepAnchor)
+                    cursor.removeSelectedText()
+                    cursor.insertFragment(self._markdown_fragment(message))
+                self._stream_start = None
+                self._stream_end = None
             elif message:
                 self.chat_view.append(
-                    f'<span style="color:#4ec9b0; font-weight:bold;">Varonika:</span> {message}'
+                    '<span style="color:#4ec9b0; font-weight:bold;">Varonika:</span> '
                 )
+                cursor = self.chat_view.textCursor()
+                cursor.movePosition(QTextCursor.MoveOperation.End)
+                cursor.insertFragment(self._markdown_fragment(message))
         elif source == "User":
-            self._streaming = False
+            self._stream_start = None
+            self._stream_end = None
             self.chat_view.append(
-                f'<span style="color:#569cd6; font-weight:bold;">You:</span> {message}'
+                f'<span style="color:#569cd6; font-weight:bold;">You:</span> {html.escape(message)}'
             )
         elif source == "System":
             self.chat_view.append(
-                f'<span style="color:#888;">{message}</span>'
+                f'<span style="color:#888;">{html.escape(message)}</span>'
             )
 
         # Auto-scroll
