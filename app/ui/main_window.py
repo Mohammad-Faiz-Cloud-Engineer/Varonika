@@ -136,6 +136,11 @@ class MainWindow(QMainWindow):
             cursor.insertText(message)
             self._stream_end = cursor.position()
             self.chat_view.setTextCursor(cursor)
+        elif source == "Varonika_stream_reset":
+            # Interrupt killed the stream — drop stale cursors so the next
+            # answer starts a fresh block at the document end.
+            self._stream_start = None
+            self._stream_end = None
         elif source == "Varonika":
             # Final full response — replace the streamed text with rendered Markdown,
             # or append the text if nothing was streamed

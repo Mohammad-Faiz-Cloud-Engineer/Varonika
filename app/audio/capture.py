@@ -24,10 +24,7 @@ class AudioCapture:
         if self.is_listening:
             # Put audio data in the queue to be processed by the background worker.
             # This prevents blocking the real-time audio thread.
-            try:
-                self.queue.put_nowait(audio_np)
-            except queue.Full:
-                pass
+            self.queue.put_nowait(audio_np)
         return (in_data, pyaudio.paContinue)
 
     def _worker_loop(self):

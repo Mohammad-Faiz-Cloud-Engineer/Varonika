@@ -1,9 +1,10 @@
+import asyncio
 import os
 from typing import Any
-from acp import spawn_agent_process
+from acp import RequestError, spawn_agent_process
 from acp.schema import (
     AgentMessageChunk, ToolCallStart,
-    PermissionOption, AllowedOutcome, RequestPermissionResponse,
+    PermissionOption, AllowedOutcome, DeniedOutcome, RequestPermissionResponse,
     ReadTextFileResponse,
     CreateTerminalResponse, TerminalOutputResponse,
     ReleaseTerminalResponse, WaitForTerminalExitResponse,
@@ -47,6 +48,8 @@ class VaronikaClient:
         self, options: list[PermissionOption], session_id: str, tool_call: ToolCallUpdate, **kwargs: Any
     ) -> RequestPermissionResponse:
         """Always approve — permissions are auto-approved by OpenCode."""
+        if not options:
+            return RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
         allow_id = next((o.option_id for o in options if o.kind.startswith("allow")), options[0].option_id)
         return RequestPermissionResponse(outcome=AllowedOutcome(outcome="selected", option_id=allow_id))
 
@@ -70,19 +73,21 @@ class VaronikaClient:
             return None
 
     async def create_terminal(self, command: str, session_id: str, **kwargs: Any) -> CreateTerminalResponse:
-        return CreateTerminalResponse(terminal_id="not-supported")
+        # Terminals are not supported: tell the agent with a proper JSON-RPC
+        # error instead of a fake success it could wait on forever.
+        raise RequestError.method_not_found("terminal/create")
 
     async def terminal_output(self, session_id: str, terminal_id: str, **kwargs: Any) -> TerminalOutputResponse:
-        return TerminalOutputResponse(output="", truncated=False)
+        raise RequestError.method_not_found("terminal/output")
 
     async def release_terminal(self, session_id: str, terminal_id: str, **kwargs: Any) -> ReleaseTerminalResponse | None:
-        return None
+        raise RequestError.method_not_found("terminal/release")
 
     async def wait_for_terminal_exit(self, session_id: str, terminal_id: str, **kwargs: Any) -> WaitForTerminalExitResponse:
-        return WaitForTerminalExitResponse(exit_status=0)
+        raise RequestError.method_not_found("terminal/wait_for_exit")
 
     async def kill_terminal(self, session_id: str, terminal_id: str, **kwargs: Any) -> KillTerminalResponse | None:
-        return None
+        raise RequestError.method_not_found("terminal/kill")
 
     async def ext_method(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {}
@@ -97,10 +102,16 @@ class OpenCodeClient:
         self.connection = None  # Agent-side connection for sending requests
         self._cm = None
         self.session_id = None
+        self._model = None
+        # Serializes prompts/resets: two concurrent requests on one session
+        # would corrupt the accumulated stream and confuse the agent.
+        self._prompt_lock = asyncio.Lock()
 
     async def get_current_model(self) -> str:
-        """Fetches the currently configured OpenCode model."""
-        import asyncio, json, shutil
+        """Fetches the currently configured OpenCode model (cached after first lookup)."""
+        if self._model:
+            return self._model
+        import json, shutil
         opencode_exe = shutil.which("opencode") or "opencode"
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -111,7 +122,8 @@ class OpenCodeClient:
             stdout, _ = await proc.communicate()
             if proc.returncode == 0:
                 config = json.loads(stdout.decode('utf-8'))
-                return config.get("model", "default")
+                self._model = config.get("model", "default")
+                return self._model
             return "unknown"
         except Exception as e:
             return "unknown"
@@ -139,16 +151,17 @@ class OpenCodeClient:
         """Creates a new fresh session and swaps the current context."""
         if not self.connection:
             raise RuntimeError("OpenCode not connected")
-        # Try to close old session gracefully if possible
-        if self.session_id:
-            try:
-                await self.connection.close_session(session_id=self.session_id)
-            except Exception:
-                pass
-                
-        resp = await self.connection.new_session(cwd=cwd)
-        self.session_id = resp.session_id
-        self.varonika_client.session_id = self.session_id
+        async with self._prompt_lock:
+            # Try to close old session gracefully if possible
+            if self.session_id:
+                try:
+                    await self.connection.close_session(session_id=self.session_id)
+                except Exception:
+                    pass
+
+            resp = await self.connection.new_session(cwd=cwd)
+            self.session_id = resp.session_id
+            self.varonika_client.session_id = self.session_id
         model = await self.get_current_model()
         print(f"OpenCode session reset. New ID: {self.session_id} (Model: {model})")
 
@@ -157,13 +170,14 @@ class OpenCodeClient:
         if not self.connection or not self.session_id:
             raise RuntimeError("OpenCode not connected")
 
-        self.varonika_client._accumulated_text = ""
-        content = [TextContentBlock(type="text", text=text)]
+        async with self._prompt_lock:
+            self.varonika_client._accumulated_text = ""
+            content = [TextContentBlock(type="text", text=text)]
 
-        resp = await self.connection.prompt(
-            prompt=content, session_id=self.session_id
-        )
-        return self.varonika_client._accumulated_text
+            resp = await self.connection.prompt(
+                prompt=content, session_id=self.session_id
+            )
+            return self.varonika_client._accumulated_text
 
     async def cancel(self):
         """Cancel the current request."""

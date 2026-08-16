@@ -15,6 +15,9 @@ env/
 # Local configuration
 config.yaml
 
+# Custom wake word model (drop at project root as Hey_Varonika.onnx)
+Hey_Varonika.onnx
+
 # Logs
 *.log
 

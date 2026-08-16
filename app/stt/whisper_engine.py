@@ -12,6 +12,12 @@ class STTEngine:
         self.silence_timeout = silence_timeout
 
         self._lock = threading.Lock()
+        # Serializes Whisper inference: the underlying model is not safe for
+        # concurrent transcribe() calls.
+        self._transcribe_lock = threading.Lock()
+        # Bumped by reset(); a transcription in flight checks it after
+        # inference and discards its result if it moved (hotkey re-activation).
+        self._transcribe_gen = 0
         self.audio_buffer = []
         self.last_speech_time = time.monotonic()
         self.speech_seen = False
@@ -61,29 +67,39 @@ class STTEngine:
     def transcribe(self) -> str:
         """
         Transcribes the current audio buffer and resets it.
+        Serialized so Whisper never runs twice in parallel; returns None if the
+        buffer was invalidated (stt.reset) while transcribing.
         """
-        with self._lock:
-            if not self.audio_buffer or not self.speech_seen:
+        with self._transcribe_lock:
+            with self._lock:
+                if not self.audio_buffer or not self.speech_seen:
+                    self.audio_buffer = []
+                    self.speech_seen = False
+                    self.last_speech_time = time.monotonic()
+                    return ""
+
+                # pywhispercpp expects float32 np array
+                full_audio = np.concatenate(self.audio_buffer)
+
+                # Reset for next time
                 self.audio_buffer = []
                 self.speech_seen = False
                 self.last_speech_time = time.monotonic()
-                return ""
+                my_gen = self._transcribe_gen
 
-            # pywhispercpp expects float32 np array
-            full_audio = np.concatenate(self.audio_buffer)
+            # Inference under the transcribe lock only — the audio buffer lock
+            # is released so process_chunk can keep feeding new audio.
+            segments = self.model.transcribe(full_audio)
 
-            # Reset for next time
-            self.audio_buffer = []
-            self.speech_seen = False
-            self.last_speech_time = time.monotonic()
-
-        # Inference outside the lock — it is slow and reset() must not block on it
-        segments = self.model.transcribe(full_audio)
-        text = "".join([segment.text for segment in segments]).strip()
-        return text
+            with self._lock:
+                if my_gen != self._transcribe_gen:
+                    return None
+            text = "".join([segment.text for segment in segments]).strip()
+            return text
 
     def reset(self):
         with self._lock:
             self.audio_buffer = []
             self.speech_seen = False
             self.last_speech_time = time.monotonic()
+            self._transcribe_gen += 1

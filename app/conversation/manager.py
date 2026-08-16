@@ -38,7 +38,12 @@ class ConversationManager:
         self.opencode.varonika_client.on_tool_start = self._on_tool_start
 
         self._stream_buffer = ""
-        self._interrupted = False
+        # Monotonic interrupt generation. A request captures the generation
+        # when it starts and is considered interrupted iff it has moved since.
+        # This avoids the stale-flag race where a cancelled request's error
+        # arrives after a newer request already started.
+        self._interrupt_gen = 0
+        self._interrupt_lock = threading.Lock()
 
         # Post-answer follow-up window: after she answers she keeps listening
         # briefly; if the user says nothing, she goes back to sleep.
@@ -89,10 +94,14 @@ class ConversationManager:
 
     def interrupt(self):
         """Stop speech and cancel any in-flight OpenCode request."""
-        self._interrupted = True
+        with self._interrupt_lock:
+            self._interrupt_gen += 1
         self.tts.stop_and_clear()
         if self._loop and not self._loop.is_closed():
             asyncio.run_coroutine_threadsafe(self.opencode.cancel(), self._loop)
+        # Whatever was streaming is dead — tell the UI to drop the stream
+        # cursors so the next answer starts a fresh block at document end.
+        self._emit_ui("Varonika_stream_reset", "")
 
     def _emit_ui(self, source: str, message: str):
         if self.ui_callback:
@@ -181,6 +190,8 @@ class ConversationManager:
     def _transcribe_and_process(self):
         """Transcribe the buffered audio off the audio thread, then handle the command."""
         text = self.stt.transcribe()
+        if text is None:
+            return  # transcription was invalidated (e.g. hotkey re-activation)
         
         # Remove Whisper noise/silence hallucinations like [BLANK_AUDIO] or (wind blowing)
         text = re.sub(r'\[.*?\]|\(.*?\)|\*.*?\*', '', text)
@@ -209,7 +220,8 @@ class ConversationManager:
             self.stt.reset()
 
     async def _process_command(self, text: str):
-        self._interrupted = False
+        with self._interrupt_lock:
+            interrupt_gen = self._interrupt_gen
         if not self._opencode_started:
             self.tts.speak("OpenCode isn't available right now.")
             self._emit_ui("Varonika", "OpenCode isn't available right now.")
@@ -243,8 +255,9 @@ class ConversationManager:
         try:
             full_response = await self.opencode.prompt(text)
         except Exception as e:
-            if self._interrupted:
-                self._interrupted = False
+            with self._interrupt_lock:
+                was_interrupted = self._interrupt_gen > interrupt_gen
+            if was_interrupted:
                 self._return_after_interrupt()
                 return
             print(f"OpenCode error: {e}")
@@ -254,8 +267,9 @@ class ConversationManager:
             self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
             return
 
-        if self._interrupted:
-            self._interrupted = False
+        with self._interrupt_lock:
+            was_interrupted = self._interrupt_gen > interrupt_gen
+        if was_interrupted:
             self._return_after_interrupt()
             return
 
@@ -296,14 +310,6 @@ class ConversationManager:
         # Collapse whitespace
         text = re.sub(r'\s+', ' ', text)
         return text.strip()
-
-    def stop(self):
-        self.audio.stop()
-        self.tts.stop()
-        if self.hotkeys:
-            self.hotkeys.stop()
-        if self._loop and not self._loop.is_closed():
-            asyncio.run_coroutine_threadsafe(self.opencode.stop(), self._loop)
 
     async def stop_async(self):
         self.audio.stop()

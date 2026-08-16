@@ -5,9 +5,10 @@ class HotkeyListener:
     def __init__(self, manager, activate_key="alt+space"):
         self.manager = manager
         self.activate_key = activate_key
+        self._hotkey = None
 
     def start(self):
-        keyboard.add_hotkey(self.activate_key, self._on_activate)
+        self._hotkey = keyboard.add_hotkey(self.activate_key, self._on_activate)
         print(f"Hotkeys registered: {self.activate_key} to activate.")
 
     def _on_activate(self):
@@ -17,9 +18,16 @@ class HotkeyListener:
             if current == AppState.SPEAKING:
                 self.manager.interrupt()
             self.manager.activate_listening()
+        elif current == AppState.TRANSCRIBING:
+            print("Hotkey pressed: Cancelling in-flight transcription.")
+            self.manager.activate_listening()
         elif current in [AppState.THINKING, AppState.EXECUTING_TOOL]:
             print("Hotkey pressed: Interrupting current task.")
             self.manager.interrupt()
 
     def stop(self):
-        keyboard.unhook_all()
+        if self._hotkey is not None:
+            try:
+                keyboard.remove_hotkey(self._hotkey)
+            except Exception:
+                keyboard.unhook_all()
