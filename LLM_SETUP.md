@@ -1,6 +1,6 @@
 # Setting up your own LLM
 
-Varonika does not have her own built-in brain. She talks to **OpenCode** running on your machine, and OpenCode talks to the LLM. This means the model she uses is whatever model OpenCode is configured to use — and you can point it at any model you like.
+Varonika does not have her own built-in brain. She talks to **OpenCode** running on your machine, and OpenCode talks to the LLM. This means the model she uses is whatever model OpenCode is configured to use, and you can point it at any model you like.
 
 ## How it works
 
@@ -22,7 +22,7 @@ or check the list of models OpenCode can see:
 opencode models
 ```
 
-## Step 1 — decide where to put the config
+## Step 1: decide where to put the config
 
 OpenCode reads its config from two places (the global one wins over nothing; the project one is optional):
 
@@ -33,7 +33,7 @@ OpenCode reads its config from two places (the global one wins over nothing; the
 
 If you only use Varonika, put everything in the global file. If you share Varonika with other people, put a project-level `opencode.json` in the repo instead (without any API keys in it).
 
-## Option A — use a model OpenCode already knows
+## Option A: use a model OpenCode already knows
 
 List the models that are available:
 
@@ -55,7 +55,7 @@ Or set it with an environment variable (temporary, useful for testing):
 OPENCODE_MODEL=ollama-cloud/gemma4:31b python app/main.py
 ```
 
-## Option B — use your own custom model (your own API endpoint)
+## Option B: use your own custom model (your own API endpoint)
 
 If you have your own OpenAI-compatible endpoint (any provider that speaks the OpenAI API: a cloud service, a self-hosted server, LM Studio, Ollama, etc.), add it as a custom provider:
 
@@ -111,9 +111,9 @@ export MYPROVIDER_API_KEY=your-api-key     # Linux / macOS
 }
 ```
 
-2. `opencode auth login` — logs in interactively and stores the credential outside the repo.
+2. `opencode auth login` logs in interactively and stores the credential outside the repo.
 
-## Step 2 — verify
+## Step 2: verify
 
 Restart Varonika (close the window and run `python app/main.py` again), then ask:
 
@@ -133,4 +133,4 @@ The first line of output shows the model in use.
 
 **The model ID in the list has a different format than mine.** Model IDs look like `provider/model-name`. Copy the ID exactly as `opencode models` prints it.
 
-**She says the model name but answers oddly.** Some models are better at following tool-use instructions than others. If a model refuses to use tools, pick a different one — it is a one-line config change.
+**She says the model name but answers oddly.** Some models are better at following tool-use instructions than others. If a model refuses to use tools, pick a different one, it is a one-line config change.
