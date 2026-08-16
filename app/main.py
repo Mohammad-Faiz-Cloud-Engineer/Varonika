@@ -59,4 +59,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        import sys
+        print(f"Fatal crash: {e}", file=sys.stderr)
+        traceback.print_exc()
+        sys.exit(1)

@@ -99,7 +99,7 @@ class UltronBrain(QWidget):
         orb_color = QColor(color)
         orb_color.setAlpha(150)
         painter.setBrush(QBrush(orb_color))
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QPointF(center_x, center_y), radius, radius)
 
         painter.end()

@@ -27,6 +27,11 @@ class StateManager:
         with self._lock:
             self._listeners.append(callback)
 
+    def remove_listener(self, callback):
+        with self._lock:
+            if callback in self._listeners:
+                self._listeners.remove(callback)
+
     def set_state(self, new_state: AppState):
         with self._lock:
             if self._state == new_state:

@@ -34,6 +34,8 @@ class VaronikaClient:
         self, session_id: str, update, **kwargs: Any
     ) -> None:
         """Called when OpenCode sends a session notification (streamed chunks)."""
+        if session_id != self.session_id:
+            return
         if isinstance(update, AgentMessageChunk):
             if update.content and hasattr(update.content, 'text') and update.content.text:
                 self._accumulated_text += update.content.text
@@ -70,7 +72,7 @@ class VaronikaClient:
                 f.write(content)
             return WriteTextFileResponse()
         except Exception as e:
-            return None
+            raise Exception(f"Failed to write file: {e}")
 
     async def create_terminal(self, command: str, session_id: str, **kwargs: Any) -> CreateTerminalResponse:
         # Terminals are not supported: tell the agent with a proper JSON-RPC
@@ -126,6 +128,7 @@ class OpenCodeClient:
                 return self._model
             return "unknown"
         except Exception as e:
+            print(f"Warning: Failed to get current model: {e}")
             return "unknown"
 
     async def start(self, cwd: str = "."):
@@ -133,19 +136,25 @@ class OpenCodeClient:
         print("Starting OpenCode ACP server...")
         import shutil
         opencode_exe = shutil.which("opencode") or "opencode"
-        self._cm = spawn_agent_process(
-            self.varonika_client, opencode_exe, "acp", "--cwd", cwd,
-            transport_kwargs={"limit": 32 * 1024 * 1024},
-        )
-        self.connection, _ = await self._cm.__aenter__()
-        self.varonika_client.connection = self.connection
+        try:
+            self._cm = spawn_agent_process(
+                self.varonika_client, opencode_exe, "acp", "--cwd", cwd,
+                transport_kwargs={"limit": 32 * 1024 * 1024},
+            )
+            self.connection, _ = await self._cm.__aenter__()
+            self.varonika_client.connection = self.connection
 
-        # Create a new session
-        resp = await self.connection.new_session(cwd=cwd)
-        self.session_id = resp.session_id
-        self.varonika_client.session_id = self.session_id
-        model = await self.get_current_model()
-        print(f"OpenCode session created: {self.session_id} (Model: {model})")
+            # Create a new session
+            resp = await self.connection.new_session(cwd=cwd)
+            self.session_id = resp.session_id
+            self.varonika_client.session_id = self.session_id
+            model = await self.get_current_model()
+            print(f"OpenCode session created: {self.session_id} (Model: {model})")
+        except Exception as e:
+            print(f"Failed to start OpenCode ACP server: {e}")
+            self._cm = None
+            self.connection = None
+            raise
 
     async def reset_session(self, cwd: str = "."):
         """Creates a new fresh session and swaps the current context."""

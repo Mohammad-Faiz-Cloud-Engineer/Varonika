@@ -3,6 +3,7 @@ import re
 import threading
 import time
 import random
+from concurrent.futures import ThreadPoolExecutor
 from app.conversation.state import StateManager, AppState
 from app.audio.capture import AudioCapture
 from app.wakeword.detector import WakeWordDetector
@@ -44,6 +45,9 @@ class ConversationManager:
         # arrives after a newer request already started.
         self._interrupt_gen = 0
         self._interrupt_lock = threading.Lock()
+        
+        self._stream_lock = threading.Lock()
+        self._transcribe_pool = ThreadPoolExecutor(max_workers=1)
 
         # Post-answer follow-up window: after she answers she keeps listening
         # briefly; if the user says nothing, she goes back to sleep.
@@ -113,18 +117,23 @@ class ConversationManager:
         # flight. The answer is dead: never speak (or buffer) its tail.
         if self.state.current not in [AppState.THINKING, AppState.EXECUTING_TOOL, AppState.SPEAKING]:
             return
-        self._stream_buffer += chunk
-        self._emit_ui("Varonika_stream", chunk)
+            
+        if self.state.current in [AppState.THINKING, AppState.EXECUTING_TOOL]:
+            self.state.set_state(AppState.SPEAKING)
+            
+        with self._stream_lock:
+            self._stream_buffer += chunk
+            self._emit_ui("Varonika_stream", chunk)
 
-        # Buffer sentences for TTS
-        sentences = re.split(r'(?<=[.!?])\s+', self._stream_buffer)
-        if len(sentences) > 1:
-            # All but the last are complete sentences
-            for s in sentences[:-1]:
-                clean = self._format_speech(s)
-                if clean.strip():
-                    self.tts.speak(clean.strip())
-            self._stream_buffer = sentences[-1]
+            # Buffer sentences for TTS
+            sentences = re.split(r'(?<=[.!?])\s+', self._stream_buffer)
+            if len(sentences) > 1:
+                # All but the last are complete sentences
+                for s in sentences[:-1]:
+                    clean = self._format_speech(s)
+                    if clean.strip():
+                        self.tts.speak(clean.strip())
+                self._stream_buffer = sentences[-1]
 
     def _on_tool_start(self, title: str, tool_call_id: str):
         self.state.set_state(AppState.EXECUTING_TOOL)
@@ -144,10 +153,8 @@ class ConversationManager:
                 print("Wake word detected!")
                 if current == AppState.SPEAKING:
                     self.interrupt()
-                    self.state.set_state(AppState.INTERRUPTED)
 
                 self._clear_follow_up()
-                self.state.set_state(AppState.WAKEWORD_DETECTED)
                 self._emit_ui("System", "Wake word detected!")
                 self.tts.speak(random.choice(["Yes Boss", "Yes Sir"]))
                 self.tts.signal_answer_end()
@@ -190,32 +197,39 @@ class ConversationManager:
             if ready:
                 self.state.set_state(AppState.TRANSCRIBING)
                 # Whisper inference is slow: never run it on the audio callback thread
-                threading.Thread(target=self._transcribe_and_process, daemon=True).start()
+                self._transcribe_pool.submit(self._transcribe_and_process)
 
     def _transcribe_and_process(self):
         """Transcribe the buffered audio off the audio thread, then handle the command."""
-        text = self.stt.transcribe()
-        if text is None:
-            return  # transcription was invalidated (e.g. hotkey re-activation)
-        
-        # Remove Whisper noise/silence hallucinations like [BLANK_AUDIO] or (wind blowing)
-        text = re.sub(r'\[.*?\]|\(.*?\)|\*.*?\*', '', text)
-        
-        text = self._WAKE_PHRASE_RE.sub("", text, count=1).strip()
-        if not text:
-            self._clear_follow_up()
-            self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
-            return
+        try:
+            text = self.stt.transcribe()
+            if text is None:
+                return  # transcription was invalidated (e.g. hotkey re-activation)
+            
+            # Remove Whisper noise/silence hallucinations like [BLANK_AUDIO] or (wind blowing)
+            text = re.sub(r'\[.*?\]|\(.*?\)|\*.*?\*', '', text)
+            
+            text = self._WAKE_PHRASE_RE.sub("", text, count=1).strip()
+            if not text:
+                self._clear_follow_up()
+                self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+                return
 
-        print(f"User said: {text}")
-        self._emit_ui("User", text)
-        self.state.set_state(AppState.THINKING)
+            print(f"User said: {text}")
+            self._emit_ui("User", text)
+            self.state.set_state(AppState.THINKING)
 
-        # Send to OpenCode on the event loop
-        if self._loop and not self._loop.is_closed():
-            asyncio.run_coroutine_threadsafe(
-                self._process_command(text), self._loop
-            )
+            # Send to OpenCode on the event loop
+            if self._loop and not self._loop.is_closed():
+                asyncio.run_coroutine_threadsafe(
+                    self._process_command(text), self._loop
+                )
+        except Exception as e:
+            print(f"Transcription error: {e}")
+        finally:
+            if self.state.current == AppState.TRANSCRIBING:
+                self._clear_follow_up()
+                self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
 
     def _return_after_interrupt(self):
         """Restore listening mode after an interrupted prompt (hotkey activation: no follow-up window)."""
@@ -257,7 +271,8 @@ class ConversationManager:
             self.stt.reset()
             return
 
-        self._stream_buffer = ""
+        with self._stream_lock:
+            self._stream_buffer = ""
         self.state.set_state(AppState.THINKING)
 
         try:
@@ -285,11 +300,12 @@ class ConversationManager:
         self.state.set_state(AppState.SPEAKING)
 
         # Flush any remaining buffered text to TTS
-        if self._stream_buffer.strip():
-            clean = self._format_speech(self._stream_buffer)
-            if clean.strip():
-                self.tts.speak(clean.strip())
-            self._stream_buffer = ""
+        with self._stream_lock:
+            if self._stream_buffer.strip():
+                clean = self._format_speech(self._stream_buffer)
+                if clean.strip():
+                    self.tts.speak(clean.strip())
+                self._stream_buffer = ""
         # The answer is complete: the reverb tail may now run once the last
         # sentence has played. Without this, the tail would fire mid-answer
         # every time the LLM pauses between sentences.

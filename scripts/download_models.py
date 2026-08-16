@@ -9,7 +9,7 @@ def download_file(url, destination):
     # We use a progress bar
     def reporthook(count, block_size, total_size):
         if total_size > 0:
-            progress = int(count * block_size * 100 / total_size)
+            progress = min(100, int(count * block_size * 100 / total_size))
             sys.stdout.write(f"\rDownloading... {progress}%")
             sys.stdout.flush()
 

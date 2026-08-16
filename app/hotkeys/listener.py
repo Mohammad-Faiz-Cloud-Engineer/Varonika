@@ -12,6 +12,11 @@ class HotkeyListener:
         print(f"Hotkeys registered: {self.activate_key} to activate.")
 
     def _on_activate(self):
+        # Dispatch to the main event loop for thread safety
+        if self.manager._loop and not self.manager._loop.is_closed():
+            self.manager._loop.call_soon_threadsafe(self._handle_activate)
+
+    def _handle_activate(self):
         print("Hotkey pressed: Activating voice input.")
         current = self.manager.state.current
         if current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING, AppState.IDLE]:

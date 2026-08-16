@@ -12,7 +12,7 @@ class AudioCapture:
         self.is_listening = False
         self.callbacks = []
         
-        self.queue = queue.Queue()
+        self.queue = queue.Queue(maxsize=50)
         self.worker_thread = None
         self._stop_event = threading.Event()
 
@@ -20,11 +20,14 @@ class AudioCapture:
         self.callbacks.append(callback)
 
     def _audio_callback(self, in_data, frame_count, time_info, status):
-        audio_np = np.frombuffer(in_data, dtype=np.int16).copy()
         if self.is_listening:
+            audio_np = np.frombuffer(in_data, dtype=np.int16).copy()
             # Put audio data in the queue to be processed by the background worker.
             # This prevents blocking the real-time audio thread.
-            self.queue.put_nowait(audio_np)
+            try:
+                self.queue.put_nowait(audio_np)
+            except queue.Full:
+                pass
         return (in_data, pyaudio.paContinue)
 
     def _worker_loop(self):
@@ -83,12 +86,17 @@ class AudioCapture:
             
         self._stop_event.set()
         if self.worker_thread and self.worker_thread.is_alive():
-            self.queue.put(None) # Sentinel
+            try:
+                self.queue.put_nowait(None) # Sentinel
+            except queue.Full:
+                pass
             self.worker_thread.join(timeout=1.0)
+            if self.worker_thread.is_alive():
+                print("Warning: Audio worker thread did not terminate.")
             self.worker_thread = None
             
         # Clear any remaining items in queue
-        while not self.queue.empty():
+        while True:
             try:
                 self.queue.get_nowait()
             except queue.Empty:

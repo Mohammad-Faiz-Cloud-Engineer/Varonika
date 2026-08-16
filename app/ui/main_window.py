@@ -197,11 +197,19 @@ class MainWindow(QMainWindow):
         self.brain.set_state(state)
 
     def closeEvent(self, event):
+        if getattr(self, '_force_quit', False):
+            event.accept()
+            return
         event.ignore()
         self.hide()
         self.tray.showMessage("Varonika", "Varonika is running in the background.")
 
     @qasync.asyncSlot()
     async def close_app(self):
-        await self.manager.stop_async()
+        self._force_quit = True
+        try:
+            import asyncio
+            await asyncio.wait_for(self.manager.stop_async(), timeout=2.0)
+        except Exception:
+            pass
         QApplication.quit()

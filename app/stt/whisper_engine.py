@@ -40,7 +40,10 @@ class STTEngine:
         Returns True if silence timeout is reached after speech.
         """
         # Convert to float32 for energy calculation
-        audio_float = audio_chunk.astype(np.float32) / 32768.0
+        if audio_chunk.dtype == np.int16:
+            audio_float = audio_chunk.astype(np.float32) / 32768.0
+        else:
+            audio_float = audio_chunk.astype(np.float32)
         energy = float(np.sqrt(np.mean(audio_float**2)))
 
         if self.is_calibrating:
@@ -60,7 +63,7 @@ class STTEngine:
                 self.last_speech_time = time.monotonic()
                 self.speech_seen = True
 
-            if time.monotonic() - self.last_speech_time > self.silence_timeout:
+            if self.speech_seen and (time.monotonic() - self.last_speech_time > self.silence_timeout):
                 return True # Ready to transcribe
         return False
 

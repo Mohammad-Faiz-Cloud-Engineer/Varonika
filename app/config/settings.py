@@ -40,8 +40,10 @@ def load_config() -> Config:
                             setattr(c, k, cast_val)
                         except (ValueError, TypeError):
                             print(f"Warning: Could not cast config '{k}' value '{v}' to {expected_type.__name__}. Using default.")
-    except Exception as e:
-        print(f"Error loading config: {e}")
+    except yaml.YAMLError as e:
+        print(f"YAML Error loading config: {e}")
+    except OSError as e:
+        print(f"OS Error loading config: {e}")
     c.wake_word_model = _resolve_model_path(c.wake_word_model)
     c.stt_model = _resolve_model_path(c.stt_model)
     return c

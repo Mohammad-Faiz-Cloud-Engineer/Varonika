@@ -18,6 +18,7 @@ SILENCE_MIN_TRIM = 0.25
 
 def _compress_silences(audio: np.ndarray) -> np.ndarray:
     """Shorten silence runs longer than 250 ms to 150 ms, keep the rest."""
+    if len(audio) == 0: return audio
     silent = np.abs(audio) < SILENCE_THRESHOLD
     edges = np.flatnonzero(np.diff(silent.astype(np.int8)))
     starts = np.concatenate(([0], edges + 1))
@@ -109,6 +110,7 @@ class TTSEngine:
 
     def _worker(self, gen: int):
         print(f"TTS Worker {gen} started.")
+        producer_stop_event = threading.Event()
         # One producer thread and one prefetch queue for the whole worker
         # lifetime. The producer pulls sentences from the queue and generates
         # their audio while the worker plays the previous audio: so a full
@@ -128,14 +130,17 @@ class TTSEngine:
                             prefetch.put_nowait(IDLE)
                             break
                         except queue.Full:
-                            if self._stop_event.is_set() or gen != self._generation:
+                            if self._stop_event.is_set() or gen != self._generation or producer_stop_event.is_set():
                                 return
                             time.sleep(0.02)
                     continue
                 if item is None:
                     # Poison pill: forward it to the worker instead of
                     # re-queuing, so a later start_worker never wedges on it.
-                    prefetch.put(None)
+                    try:
+                        prefetch.put(None, timeout=0.1)
+                    except queue.Full:
+                        pass
                     return
                 stamp, text = item
                 with self._lock:
@@ -144,7 +149,7 @@ class TTSEngine:
                         # invalidated, drop it rather than speak the tail of
                         # a cancelled request.
                         return
-                    if self._stop_event.is_set() or gen != self._generation:
+                    if self._stop_event.is_set() or gen != self._generation or producer_stop_event.is_set():
                         # A newer worker owns the queue now. Hand the item
                         # back rather than dropping it: a request spoken
                         # right after an interrupt must not be swallowed.
@@ -160,7 +165,7 @@ class TTSEngine:
                         speed=self.speed, split_pattern=r'\n+'
                     )
                     for _, _, audio in generator:
-                        if self._stop_event.is_set() or gen != self._generation:
+                        if self._stop_event.is_set() or gen != self._generation or producer_stop_event.is_set():
                             return
                         if len(audio) == 0:
                             continue
@@ -171,7 +176,7 @@ class TTSEngine:
                             except queue.Full:
                                 # Worker is mid-playback; wait for room.
                                 # Only give up when interrupted.
-                                if self._stop_event.is_set() or gen != self._generation:
+                                if self._stop_event.is_set() or gen != self._generation or producer_stop_event.is_set():
                                     return
                 except Exception as e:
                     print(f"TTS Error: {e}")
@@ -241,6 +246,7 @@ class TTSEngine:
                     print(f"TTS playback error: {e}")
                     break
         finally:
+            producer_stop_event.set()
             with self._lock:
                 if self._speaking_owner == gen:
                     self._speaking_owner = None
@@ -283,15 +289,15 @@ class TTSEngine:
             self._speaking_owner = None
             self._pending_items = 0
             self._answer_ended = False
+            # clear queue
+            while not self._queue.empty():
+                try:
+                    self._queue.get_nowait()
+                except queue.Empty:
+                    break
         # Abort playback: a blocking write in the old worker raises
         # PortAudioError, so it unwinds and sees the stale generation.
         self._close_stream()
-        # clear queue
-        while not self._queue.empty():
-            try:
-                self._queue.get_nowait()
-            except queue.Empty:
-                break
         
         # restart worker immediately (orphan the old thread so audio callback isn't blocked)
         self.start_worker()
@@ -303,4 +309,4 @@ class TTSEngine:
         self._close_stream()
         if self._thread:
             self._queue.put(None)
-            self._thread.join()
+            self._thread.join(timeout=1.0)
