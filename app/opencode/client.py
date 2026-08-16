@@ -15,7 +15,7 @@ from acp.schema import (
 
 class VaronikaClient:
     """
-    Implements the ACP Client protocol - handles callbacks FROM OpenCode.
+    Implements the ACP Client protocol — handles callbacks FROM OpenCode.
     The Agent (connection) is used to SEND requests TO OpenCode.
     """
 
@@ -47,7 +47,7 @@ class VaronikaClient:
     async def request_permission(
         self, options: list[PermissionOption], session_id: str, tool_call: ToolCallUpdate, **kwargs: Any
     ) -> RequestPermissionResponse:
-        """Always approve - permissions are auto-approved by OpenCode."""
+        """Always approve — permissions are auto-approved by OpenCode."""
         if not options:
             return RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
         allow_id = next((o.option_id for o in options if o.kind.startswith("allow")), options[0].option_id)
