@@ -1,5 +1,9 @@
 # Varonika
 
+![CI](https://github.com/Mohammad-Faiz-Cloud-Engineer/Varonika/actions/workflows/ci.yml/badge.svg)
+![Python Versions](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
+![License](https://img.shields.io/github/license/Mohammad-Faiz-Cloud-Engineer/Varonika)
+
 Varonika is a hands free voice assistant for your PC. You say "Hey Varonika", she listens, asks OpenCode to do the work, and speaks the answer back to you.
 
 She can open apps, search the web, read files, run commands, and answer questions. She runs fully on your machine, in the background, and only starts listening after you say the wake word.
@@ -15,9 +19,11 @@ She can open apps, search the web, read files, run commands, and answer question
 
 ## Requirements
 
-- Windows (it is built and tested on Windows)
-- Python 3.11 or newer
+- Windows, macOS, or Linux (Ubuntu)
+- Python 3.11 or 3.12 (Python 3.13+ is not currently supported due to underlying dependency constraints)
 - The `opencode` CLI installed and available on your PATH (this is the brain she talks to)
+
+> **Note for Linux Users:** On Linux (Ubuntu), Python 3.12 is currently not supported. This is because the `openwakeword` dependency requires `tflite-runtime` on Linux, which does not have pre-built wheels for Python 3.12. Please use Python 3.11 on Linux.
 
 ## Setup
 
