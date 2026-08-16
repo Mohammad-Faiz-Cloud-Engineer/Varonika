@@ -64,7 +64,7 @@ class ConversationManager:
             self._emit_ui("System", "OpenCode connected.")
         except Exception as e:
             print(f"Failed to start OpenCode: {e}")
-            self._emit_ui("System", f"⚠ OpenCode unavailable: {e}")
+            self._emit_ui("System", f"OpenCode unavailable: {e}")
             self._opencode_started = False
 
     def set_ui_callback(self, cb):
@@ -113,7 +113,7 @@ class ConversationManager:
 
     def _on_tool_start(self, title: str, tool_call_id: str):
         self.state.set_state(AppState.EXECUTING_TOOL)
-        self._emit_ui("System", f"🔧 Tool: {title}")
+        self._emit_ui("System", f"Tool: {title}")
 
     def _on_audio_chunk(self, chunk):
         """Audio callback from the microphone — runs on the audio callback thread."""
@@ -133,7 +133,7 @@ class ConversationManager:
 
                 self._clear_follow_up()
                 self.state.set_state(AppState.WAKEWORD_DETECTED)
-                self._emit_ui("System", "🎤 Wake word detected!")
+                self._emit_ui("System", "Wake word detected!")
                 self.state.set_state(AppState.LISTENING)
                 self.stt.reset()
                 return
@@ -212,7 +212,7 @@ class ConversationManager:
         lower_text = text.lower().strip()
         reset_phrases = ["reset session", "forget everything", "clear history", "start over"]
         if any(phrase in lower_text for phrase in reset_phrases):
-            self._emit_ui("System", "🧹 Resetting OpenCode context...")
+            self._emit_ui("System", "Resetting OpenCode context...")
             try:
                 # Tell OpenCode to start a new session
                 await self.opencode.reset_session()
