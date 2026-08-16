@@ -1,0 +1,239 @@
+import asyncio
+import re
+import threading
+from app.conversation.state import StateManager, AppState
+from app.audio.capture import AudioCapture
+from app.wakeword.detector import WakeWordDetector
+from app.stt.whisper_engine import STTEngine
+from app.tts.kokoro_engine import TTSEngine
+from app.opencode.client import OpenCodeClient
+from app.config.settings import Config
+
+
+class ConversationManager:
+    _WAKE_PHRASE_RE = re.compile(
+        r"^\s*(hey|ok|okay)?\s*(varonika|veronica|varonica|varunika)[,\s!?.-]*",
+        re.IGNORECASE,
+    )
+    def __init__(self, config: Config, state_manager: StateManager):
+        self.config = config
+        self.state = state_manager
+
+        self.audio = AudioCapture(chunk_size=1280)
+        self.wakeword = WakeWordDetector(config.wake_word_model, config.wake_word_threshold)
+        self.stt = STTEngine(config.stt_model, config.energy_threshold, config.silence_timeout_ms / 1000.0)
+        self.tts = TTSEngine(voice=config.tts_voice)
+        self.opencode = OpenCodeClient()
+
+        self.audio.add_callback(self._on_audio_chunk)
+        self.ui_callback = None
+        self._loop = None
+        self._opencode_started = False
+
+        # Wire up streaming callbacks
+        self.opencode.varonika_client.on_text_chunk = self._on_stream_text
+        self.opencode.varonika_client.on_tool_start = self._on_tool_start
+
+        self._stream_buffer = ""
+        self._speaking_lock = threading.Lock()
+        self._interrupted = False
+
+    def start(self, loop: asyncio.AbstractEventLoop):
+        self._loop = loop
+        self.tts.start_worker()
+        self.audio.start()
+        
+        # Start dynamic noise floor calibration (e.g. 2 seconds)
+        self.stt.start_calibration(duration_sec=2.0)
+        
+        self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+        # Start opencode asynchronously
+        asyncio.ensure_future(self._start_opencode(), loop=self._loop)
+
+    async def _start_opencode(self):
+        try:
+            await self.opencode.start()
+            self._opencode_started = True
+            self._emit_ui("System", "OpenCode connected.")
+        except Exception as e:
+            print(f"Failed to start OpenCode: {e}")
+            self._emit_ui("System", f"⚠ OpenCode unavailable: {e}")
+            self._opencode_started = False
+
+    def set_ui_callback(self, cb):
+        self.ui_callback = cb
+
+    def interrupt(self):
+        """Stop speech and cancel any in-flight OpenCode request."""
+        self._interrupted = True
+        self.tts.stop_and_clear()
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(self.opencode.cancel(), self._loop)
+
+    def _emit_ui(self, source: str, message: str):
+        if self.ui_callback:
+            self.ui_callback(source, message)
+
+    def _on_stream_text(self, chunk: str):
+        """Called from the ACP client when a text chunk arrives from OpenCode."""
+        self._stream_buffer += chunk
+        self._emit_ui("Varonika_stream", chunk)
+
+        # Buffer sentences for TTS
+        sentences = re.split(r'(?<=[.!?])\s+', self._stream_buffer)
+        if len(sentences) > 1:
+            # All but the last are complete sentences
+            for s in sentences[:-1]:
+                clean = self._format_speech(s)
+                if clean.strip():
+                    self.tts.speak(clean.strip())
+            self._stream_buffer = sentences[-1]
+
+    def _on_tool_start(self, title: str, tool_call_id: str):
+        self.state.set_state(AppState.EXECUTING_TOOL)
+        self._emit_ui("System", f"🔧 Tool: {title}")
+
+    def _on_audio_chunk(self, chunk):
+        """Audio callback from the microphone — runs on PyAudio thread."""
+        current = self.state.current
+
+        # Wake word detection during idle/wakeword listening or speaking
+        if current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING]:
+            if self.wakeword.process_chunk(chunk):
+                print("Wake word detected!")
+                if current == AppState.SPEAKING:
+                    self.interrupt()
+                    self.state.set_state(AppState.INTERRUPTED)
+
+                self.state.set_state(AppState.WAKEWORD_DETECTED)
+                self._emit_ui("System", "🎤 Wake word detected!")
+                self.state.set_state(AppState.LISTENING)
+                self.stt.reset()
+                return
+
+        # STT during active listening
+        if current == AppState.LISTENING:
+            if self.tts.is_speaking():
+                return  # echo guard: don't transcribe our own speech
+            ready = self.stt.process_chunk(chunk)
+            if ready:
+                self.state.set_state(AppState.TRANSCRIBING)
+                text = self.stt.transcribe()
+                text = self._WAKE_PHRASE_RE.sub("", text, count=1).strip()
+                if not text or not text.strip():
+                    self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+                    return
+
+                print(f"User said: {text}")
+                self._emit_ui("User", text)
+                self.state.set_state(AppState.THINKING)
+
+                # Send to OpenCode on the event loop
+                if self._loop:
+                    asyncio.run_coroutine_threadsafe(
+                        self._process_command(text), self._loop
+                    )
+
+    def _return_after_interrupt(self):
+        """Restore the listening mode after an interrupted prompt."""
+        if self.state.current in [AppState.THINKING, AppState.EXECUTING_TOOL]:
+            if self.config.continuous_mode:
+                self.state.set_state(AppState.LISTENING)
+                self.stt.reset()
+            else:
+                self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+
+    async def _process_command(self, text: str):
+        self._interrupted = False
+        if not self._opencode_started:
+            self.tts.speak("OpenCode isn't available right now.")
+            self._emit_ui("Varonika", "OpenCode isn't available right now.")
+            self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+            return
+            
+        # Check for context reset commands
+        lower_text = text.lower().strip()
+        reset_phrases = ["reset session", "forget everything", "clear history", "start over"]
+        if any(phrase in lower_text for phrase in reset_phrases):
+            self._emit_ui("System", "🧹 Resetting OpenCode context...")
+            try:
+                # Tell OpenCode to start a new session
+                await self.opencode.reset_session()
+                self.tts.speak("I have cleared my memory for a fresh start.")
+                self._emit_ui("Varonika", "Session reset successfully.")
+            except Exception as e:
+                self.tts.speak("I couldn't reset the session.")
+                self._emit_ui("System", f"Reset failed: {e}")
+                
+            if self.config.continuous_mode:
+                self.state.set_state(AppState.LISTENING)
+                self.stt.reset()
+            else:
+                self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+            return
+
+        self._stream_buffer = ""
+        self.state.set_state(AppState.THINKING)
+
+        try:
+            full_response = await self.opencode.prompt(text)
+        except Exception as e:
+            if self._interrupted:
+                self._interrupted = False
+                self._return_after_interrupt()
+                return
+            print(f"OpenCode error: {e}")
+            self.tts.speak("Sorry, there was an error communicating with OpenCode.")
+            self._emit_ui("Varonika", f"Error: {e}")
+            self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+            return
+
+        if self._interrupted:
+            self._interrupted = False
+            self._return_after_interrupt()
+            return
+
+        self.state.set_state(AppState.SPEAKING)
+
+        # Flush any remaining buffered text to TTS
+        if self._stream_buffer.strip():
+            clean = self._format_speech(self._stream_buffer)
+            if clean.strip():
+                self.tts.speak(clean.strip())
+            self._stream_buffer = ""
+
+        # Show full response in UI
+        self._emit_ui("Varonika", full_response)
+
+        # After speaking, return to appropriate mode
+        if self.config.continuous_mode:
+            self.state.set_state(AppState.LISTENING)
+            self.stt.reset()
+        else:
+            self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+
+    def _format_speech(self, text: str) -> str:
+        """Convert raw LLM output into speakable text."""
+        # Remove code blocks
+        text = re.sub(r'```[\s\S]*?```', ' I\'ve generated the code. ', text)
+        # Remove inline code
+        text = re.sub(r'`[^`]+`', ' code snippet ', text)
+        # Remove markdown headers
+        text = re.sub(r'#+\s*', '', text)
+        # Remove markdown bold/italic
+        text = re.sub(r'\*{1,3}(.*?)\*{1,3}', r'\1', text)
+        # Remove markdown links, keep text
+        text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+        # Remove URLs
+        text = re.sub(r'https?://\S+', 'a link', text)
+        # Remove bullet points
+        text = re.sub(r'^\s*[-*]\s+', '', text, flags=re.MULTILINE)
+        # Collapse whitespace
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
+
+    def stop(self):
+        self.audio.stop()
+        self.tts.stop()
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(self.opencode.stop(), self._loop)
