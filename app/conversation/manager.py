@@ -62,7 +62,8 @@ class ConversationManager:
         try:
             await self.opencode.start()
             self._opencode_started = True
-            self._emit_ui("System", "OpenCode connected.")
+            model = await self.opencode.get_current_model()
+            self._emit_ui("System", f"OpenCode connected.\nSession: {self.opencode.session_id}\nModel: {model}")
         except Exception as e:
             print(f"Failed to start OpenCode: {e}")
             self._emit_ui("System", f"OpenCode unavailable: {e}")
@@ -225,7 +226,8 @@ class ConversationManager:
                 # Tell OpenCode to start a new session
                 await self.opencode.reset_session()
                 self.tts.speak("I have cleared my memory for a fresh start.")
-                self._emit_ui("Varonika", "Session reset successfully.")
+                model = await self.opencode.get_current_model()
+                self._emit_ui("System", f"Session reset successfully.\nNew Session: {self.opencode.session_id}\nModel: {model}")
             except Exception as e:
                 self.tts.speak("I couldn't reset the session.")
                 self._emit_ui("System", f"Reset failed: {e}")

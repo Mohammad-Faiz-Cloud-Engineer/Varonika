@@ -98,6 +98,24 @@ class OpenCodeClient:
         self._cm = None
         self.session_id = None
 
+    async def get_current_model(self) -> str:
+        """Fetches the currently configured OpenCode model."""
+        import asyncio, json, shutil
+        opencode_exe = shutil.which("opencode") or "opencode"
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                opencode_exe, "debug", "config",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode == 0:
+                config = json.loads(stdout.decode('utf-8'))
+                return config.get("model", "default")
+            return "unknown"
+        except Exception as e:
+            return "unknown"
+
     async def start(self, cwd: str = "."):
         """Starts the OpenCode ACP process and connects to it via stdio."""
         print("Starting OpenCode ACP server...")
@@ -114,7 +132,8 @@ class OpenCodeClient:
         resp = await self.connection.new_session(cwd=cwd)
         self.session_id = resp.session_id
         self.varonika_client.session_id = self.session_id
-        print(f"OpenCode session created: {self.session_id}")
+        model = await self.get_current_model()
+        print(f"OpenCode session created: {self.session_id} (Model: {model})")
 
     async def reset_session(self, cwd: str = "."):
         """Creates a new fresh session and swaps the current context."""
@@ -130,7 +149,8 @@ class OpenCodeClient:
         resp = await self.connection.new_session(cwd=cwd)
         self.session_id = resp.session_id
         self.varonika_client.session_id = self.session_id
-        print(f"OpenCode session reset. New ID: {self.session_id}")
+        model = await self.get_current_model()
+        print(f"OpenCode session reset. New ID: {self.session_id} (Model: {model})")
 
     async def prompt(self, text: str) -> str:
         """Send a prompt and wait for completion. Streamed chunks arrive via session_update."""
