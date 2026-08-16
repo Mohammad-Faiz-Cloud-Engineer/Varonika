@@ -37,7 +37,6 @@ class ConversationManager:
         self.opencode.varonika_client.on_tool_start = self._on_tool_start
 
         self._stream_buffer = ""
-        self._speaking_lock = threading.Lock()
         self._interrupted = False
 
         # Post-answer follow-up window: after she answers she keeps listening

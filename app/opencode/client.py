@@ -2,8 +2,7 @@ import os
 from typing import Any
 from acp import spawn_agent_process
 from acp.schema import (
-    AgentMessageChunk, AgentThoughtChunk,
-    ToolCallStart, ToolCallProgress,
+    AgentMessageChunk, ToolCallStart,
     PermissionOption, AllowedOutcome, RequestPermissionResponse,
     ReadTextFileResponse,
     CreateTerminalResponse, TerminalOutputResponse,
@@ -24,8 +23,6 @@ class VaronikaClient:
         self.session_id = None
         self.on_text_chunk = None       # callback(str)
         self.on_tool_start = None       # callback(title, tool_call_id)
-        self.on_tool_progress = None    # callback(title, tool_call_id)
-        self.on_thought = None          # callback(str)
         self._accumulated_text = ""
 
     def on_connect(self, conn) -> None:
@@ -42,18 +39,9 @@ class VaronikaClient:
                 if self.on_text_chunk:
                     self.on_text_chunk(update.content.text)
 
-        elif isinstance(update, AgentThoughtChunk):
-            if update.content and hasattr(update.content, 'text') and update.content.text:
-                if self.on_thought:
-                    self.on_thought(update.content.text)
-
         elif isinstance(update, ToolCallStart):
             if self.on_tool_start:
                 self.on_tool_start(update.title or "Tool", update.tool_call_id)
-
-        elif isinstance(update, ToolCallProgress):
-            if self.on_tool_progress:
-                self.on_tool_progress(update.title or "Tool", update.tool_call_id)
 
     async def request_permission(
         self, options: list[PermissionOption], session_id: str, tool_call: ToolCallUpdate, **kwargs: Any

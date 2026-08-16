@@ -6,7 +6,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 @dataclass
 class Config:
-    wake_word_phrase: str = "Hey Varonika"
     wake_word_model: str = "models/wakeword.onnx"
     wake_word_threshold: float = 0.5
     stt_model: str = "models/ggml-small.en.bin"

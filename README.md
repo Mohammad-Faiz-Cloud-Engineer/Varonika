@@ -69,7 +69,6 @@ After she answers she keeps listening for a short follow-up question. If you sta
 All settings have sensible defaults, but you can create a `config.yaml` next to the project root to override them:
 
 ```yaml
-wake_word_phrase: "Hey Varonika"   # what you say to wake her
 wake_word_threshold: 0.5           # higher = harder to trigger
 stt_model: "models/ggml-small.en.bin"
 stt_language: "en"

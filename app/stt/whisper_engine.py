@@ -14,7 +14,6 @@ class STTEngine:
         self._lock = threading.Lock()
         self.audio_buffer = []
         self.last_speech_time = time.time()
-        self.has_spoken = False
         self.speech_seen = False
 
         # Calibration state
@@ -53,7 +52,6 @@ class STTEngine:
             self.audio_buffer.append(audio_float)
             if energy > self.energy_threshold:
                 self.last_speech_time = time.time()
-                self.has_spoken = True
                 self.speech_seen = True
 
             if time.time() - self.last_speech_time > self.silence_timeout:
@@ -67,7 +65,6 @@ class STTEngine:
         with self._lock:
             if not self.audio_buffer or not self.speech_seen:
                 self.audio_buffer = []
-                self.has_spoken = False
                 self.speech_seen = False
                 self.last_speech_time = time.time()
                 return ""
@@ -77,7 +74,6 @@ class STTEngine:
 
             # Reset for next time
             self.audio_buffer = []
-            self.has_spoken = False
             self.speech_seen = False
             self.last_speech_time = time.time()
 
@@ -89,6 +85,5 @@ class STTEngine:
     def reset(self):
         with self._lock:
             self.audio_buffer = []
-            self.has_spoken = False
             self.speech_seen = False
             self.last_speech_time = time.time()

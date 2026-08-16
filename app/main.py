@@ -46,7 +46,7 @@ def main():
 
     window = MainWindow(manager)
 
-    hotkeys = HotkeyListener(state, manager)
+    hotkeys = HotkeyListener(manager)
     hotkeys.start()
 
     # Pass the running loop so the manager can schedule coroutines
