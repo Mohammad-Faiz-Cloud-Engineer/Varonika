@@ -60,12 +60,12 @@ class TTSEngine:
         self._stream_lock = threading.Lock()
         # True while the producer is mid-generation of a text. The worker
         # uses this to distinguish "answer over" from "next sentence is
-        # being synthesized right now" — without it the reverb tail fires
+        # being synthesized right now" - without it the reverb tail fires
         # mid-answer whenever the LLM pauses between sentences.
         self._producing = False
         # Set by the manager when the answer is finished (final flush).
         # The producer cannot tell "LLM thinking between sentences" from
-        # "answer over" — only the manager can — so the reverb tail waits
+        # "answer over" - only the manager can - so the reverb tail waits
         # for this explicit signal instead of guessing.
         self._answer_ended = False
 
@@ -75,7 +75,7 @@ class TTSEngine:
         A single stream flows sentences together with no start/stop gaps, so
         words are never clipped at sentence boundaries. (sd.play per sentence
         restarts the device stream every sentence, and Windows eats the start
-        of each restart — words come out chopped.)
+        of each restart - words come out chopped.)
         """
         with self._stream_lock:
             if self._stream is None:
@@ -111,7 +111,7 @@ class TTSEngine:
         print(f"TTS Worker {gen} started.")
         # One producer thread and one prefetch queue for the whole worker
         # lifetime. The producer pulls sentences from the queue and generates
-        # their audio while the worker plays the previous audio — so a full
+        # their audio while the worker plays the previous audio - so a full
         # stop no longer waits for the next sentence to be synthesized.
         prefetch = queue.Queue(maxsize=3)
         IDLE = object()
@@ -146,7 +146,7 @@ class TTSEngine:
                         return
                     if self._stop_event.is_set() or gen != self._generation:
                         # A newer worker owns the queue now. Hand the item
-                        # back rather than dropping it — a request spoken
+                        # back rather than dropping it - a request spoken
                         # right after an interrupt must not be swallowed.
                         self._queue.put(item)
                         return
@@ -197,7 +197,7 @@ class TTSEngine:
                 if item is IDLE:
                     # Producer is waiting for the next text. The reverb tail
                     # fires only after the manager signals the answer is over
-                    # and nothing is still generating or queued — so it never
+                    # and nothing is still generating or queued - so it never
                     # lands mid-answer while the LLM is thinking between
                     # sentences.
                     with self._lock:
@@ -215,7 +215,7 @@ class TTSEngine:
                 if item is None:
                     break
                 # A stale chunk pulled just as an interrupt landed: don't
-                # write it — the successor's stream may already be live.
+                # write it - the successor's stream may already be live.
                 if self._stop_event.is_set() or gen != self._generation:
                     break
                 # New audio after an idle gap (e.g. a follow-up): raise the

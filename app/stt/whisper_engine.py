@@ -87,7 +87,7 @@ class STTEngine:
                 self.last_speech_time = time.monotonic()
                 my_gen = self._transcribe_gen
 
-            # Inference under the transcribe lock only — the audio buffer lock
+            # Inference under the transcribe lock only - the audio buffer lock
             # is released so process_chunk can keep feeding new audio.
             segments = self.model.transcribe(full_audio)
 
