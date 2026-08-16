@@ -24,7 +24,7 @@ class ConversationManager:
         self.audio = AudioCapture(chunk_size=1280)
         self.wakeword = WakeWordDetector(config.wake_word_model, config.wake_word_threshold)
         self.stt = STTEngine(config.stt_model, config.energy_threshold, config.silence_timeout_ms / 1000.0, language=config.stt_language)
-        self.tts = TTSEngine(voice=config.tts_voice)
+        self.tts = TTSEngine(voice=config.tts_voice, speed=config.tts_speed)
         self.opencode = OpenCodeClient()
 
         self.audio.add_callback(self._on_audio_chunk)
@@ -109,6 +109,10 @@ class ConversationManager:
 
     def _on_stream_text(self, chunk: str):
         """Called from the ACP client when a text chunk arrives from OpenCode."""
+        # Chunks can straggle in after an interrupt while the cancel is in
+        # flight. The answer is dead — never speak (or buffer) its tail.
+        if self.state.current not in [AppState.THINKING, AppState.EXECUTING_TOOL, AppState.SPEAKING]:
+            return
         self._stream_buffer += chunk
         self._emit_ui("Varonika_stream", chunk)
 
@@ -146,6 +150,7 @@ class ConversationManager:
                 self.state.set_state(AppState.WAKEWORD_DETECTED)
                 self._emit_ui("System", "Wake word detected!")
                 self.tts.speak(random.choice(["Yes Boss", "Yes Sir"]))
+                self.tts.signal_answer_end()
                 self.state.set_state(AppState.LISTENING)
                 self.stt.reset()
                 return
@@ -224,6 +229,7 @@ class ConversationManager:
             interrupt_gen = self._interrupt_gen
         if not self._opencode_started:
             self.tts.speak("OpenCode isn't available right now.")
+            self.tts.signal_answer_end()
             self._emit_ui("Varonika", "OpenCode isn't available right now.")
             self._clear_follow_up()
             self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
@@ -238,10 +244,12 @@ class ConversationManager:
                 # Tell OpenCode to start a new session
                 await self.opencode.reset_session()
                 self.tts.speak("I have cleared my memory for a fresh start.")
+                self.tts.signal_answer_end()
                 model = await self.opencode.get_current_model()
                 self._emit_ui("System", f"Session reset successfully.\nNew Session: {self.opencode.session_id}\nModel: {model}")
             except Exception as e:
                 self.tts.speak("I couldn't reset the session.")
+                self.tts.signal_answer_end()
                 self._emit_ui("System", f"Reset failed: {e}")
 
             self._arm_follow_up()
@@ -262,6 +270,7 @@ class ConversationManager:
                 return
             print(f"OpenCode error: {e}")
             self.tts.speak("Sorry, there was an error communicating with OpenCode.")
+            self.tts.signal_answer_end()
             self._emit_ui("Varonika", f"Error: {e}")
             self._clear_follow_up()
             self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
@@ -281,6 +290,10 @@ class ConversationManager:
             if clean.strip():
                 self.tts.speak(clean.strip())
             self._stream_buffer = ""
+        # The answer is complete — the reverb tail may now run once the last
+        # sentence has played. Without this, the tail would fire mid-answer
+        # every time the LLM pauses between sentences.
+        self.tts.signal_answer_end()
 
         # Show full response in UI
         self._emit_ui("Varonika", full_response)

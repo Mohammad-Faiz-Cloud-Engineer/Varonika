@@ -13,6 +13,8 @@ class Config:
     silence_timeout_ms: int = 2500
     energy_threshold: float = 0.015
     tts_voice: str = "af_bella"
+    # Below 1.0 speaks slower and articulates words more clearly.
+    tts_speed: float = 0.9
     follow_up_timeout_ms: int = 2000
 
 def _resolve_model_path(path: str) -> str:

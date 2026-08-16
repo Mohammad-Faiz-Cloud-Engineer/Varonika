@@ -64,7 +64,7 @@ class STTEngine:
                 return True # Ready to transcribe
         return False
 
-    def transcribe(self) -> str:
+    def transcribe(self) -> str | None:
         """
         Transcribes the current audio buffer and resets it.
         Serialized so Whisper never runs twice in parallel; returns None if the
