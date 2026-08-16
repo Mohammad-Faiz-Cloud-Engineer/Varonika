@@ -99,7 +99,7 @@ class ConversationManager:
         self.tts.stop_and_clear()
         if self._loop and not self._loop.is_closed():
             asyncio.run_coroutine_threadsafe(self.opencode.cancel(), self._loop)
-        # Whatever was streaming is dead — tell the UI to drop the stream
+        # Whatever was streaming is dead: tell the UI to drop the stream
         # cursors so the next answer starts a fresh block at document end.
         self._emit_ui("Varonika_stream_reset", "")
 
@@ -110,7 +110,7 @@ class ConversationManager:
     def _on_stream_text(self, chunk: str):
         """Called from the ACP client when a text chunk arrives from OpenCode."""
         # Chunks can straggle in after an interrupt while the cancel is in
-        # flight. The answer is dead — never speak (or buffer) its tail.
+        # flight. The answer is dead: never speak (or buffer) its tail.
         if self.state.current not in [AppState.THINKING, AppState.EXECUTING_TOOL, AppState.SPEAKING]:
             return
         self._stream_buffer += chunk
@@ -131,7 +131,7 @@ class ConversationManager:
         self._emit_ui("System", f"Tool: {title}")
 
     def _on_audio_chunk(self, chunk):
-        """Audio callback from the microphone — runs on the audio callback thread."""
+        """Audio callback from the microphone: runs on the audio callback thread."""
         current = self.state.current
 
         # Wake word detection during idle/wakeword listening or speaking
@@ -189,7 +189,7 @@ class ConversationManager:
             ready = self.stt.process_chunk(chunk)
             if ready:
                 self.state.set_state(AppState.TRANSCRIBING)
-                # Whisper inference is slow — never run it on the audio callback thread
+                # Whisper inference is slow: never run it on the audio callback thread
                 threading.Thread(target=self._transcribe_and_process, daemon=True).start()
 
     def _transcribe_and_process(self):
@@ -290,7 +290,7 @@ class ConversationManager:
             if clean.strip():
                 self.tts.speak(clean.strip())
             self._stream_buffer = ""
-        # The answer is complete — the reverb tail may now run once the last
+        # The answer is complete: the reverb tail may now run once the last
         # sentence has played. Without this, the tail would fire mid-answer
         # every time the LLM pauses between sentences.
         self.tts.signal_answer_end()

@@ -121,7 +121,7 @@ class MainWindow(QMainWindow):
 
     def _on_ui_message(self, source, message):
         if source == "Varonika_stream":
-            # Streaming chunk — append to the stream block (not document end,
+            # Streaming chunk: append to the stream block (not document end,
             # so System notes appended mid-stream are never polluted)
             if self._stream_start is None:
                 self.chat_view.append(
@@ -137,12 +137,12 @@ class MainWindow(QMainWindow):
             self._stream_end = cursor.position()
             self.chat_view.setTextCursor(cursor)
         elif source == "Varonika_stream_reset":
-            # Interrupt killed the stream — drop stale cursors so the next
+            # Interrupt killed the stream: drop stale cursors so the next
             # answer starts a fresh block at the document end.
             self._stream_start = None
             self._stream_end = None
         elif source == "Varonika":
-            # Final full response — replace the streamed text with rendered Markdown,
+            # Final full response: replace the streamed text with rendered Markdown,
             # or append the text if nothing was streamed
             if self._stream_start is not None:
                 cursor = self.chat_view.textCursor()
