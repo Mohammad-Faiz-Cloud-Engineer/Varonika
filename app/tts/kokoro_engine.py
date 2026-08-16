@@ -14,6 +14,7 @@ class TTSEngine:
         self._queue = queue.Queue()
         self._thread = None
         self._generation = 0
+        self._pending_items = 0
         # Echo guard ownership: the generation id of the worker that currently
         # owns the guard, or None. A worker sets it when it dequeues speech and
         # clears it only if it still owns it. A stale worker (killed by an
@@ -48,6 +49,8 @@ class TTSEngine:
                 if text is None: # poison pill
                     break
                 with self._lock:
+                    if self._pending_items > 0:
+                        self._pending_items -= 1
                     if self._stop_event.is_set() or gen != self._generation:
                         break
                     self._speaking_owner = gen
@@ -86,6 +89,8 @@ class TTSEngine:
 
     def speak(self, text: str):
         """Enqueue text to be spoken."""
+        with self._lock:
+            self._pending_items += 1
         self._queue.put(text)
 
     def is_speaking(self) -> bool:
@@ -96,7 +101,7 @@ class TTSEngine:
         longer matches _generation.
         """
         with self._lock:
-            return self._speaking_owner == self._generation or not self._queue.empty()
+            return self._speaking_owner == self._generation or self._pending_items > 0
 
     def stop_and_clear(self):
         """Interrupts current speech and clears queue."""
@@ -104,6 +109,7 @@ class TTSEngine:
             self._stop_event.set()
             self._generation += 1  # invalidate the running worker
             self._speaking_owner = None
+            self._pending_items = 0
         sd.stop()
         # clear queue
         while not self._queue.empty():

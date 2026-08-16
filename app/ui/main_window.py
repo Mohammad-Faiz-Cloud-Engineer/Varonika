@@ -114,9 +114,8 @@ class MainWindow(QMainWindow):
         self.state_signal.emit(new_state)
 
     def _markdown_fragment(self, text):
-        import html
         return QTextDocumentFragment.fromMarkdown(
-            html.escape(text),
+            text,
             QTextDocument.MarkdownFeature.MarkdownDialectGitHub,
         )
 
@@ -128,7 +127,9 @@ class MainWindow(QMainWindow):
                 self.chat_view.append(
                     '<span style="color:#4ec9b0; font-weight:bold;">Varonika:</span> '
                 )
-                self._stream_start = self.chat_view.textCursor().position()
+                cursor = self.chat_view.textCursor()
+                cursor.movePosition(QTextCursor.MoveOperation.End)
+                self._stream_start = cursor.position()
                 self._stream_end = self._stream_start
             cursor = self.chat_view.textCursor()
             cursor.setPosition(self._stream_end)

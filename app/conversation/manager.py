@@ -14,7 +14,7 @@ from app.config.settings import Config
 
 class ConversationManager:
     _WAKE_PHRASE_RE = re.compile(
-        r"^\s*(hey|ok|okay)?\s*(varonika|veronica|varonica|varunika)[,\s!?.-]*",
+        r"^\s*(hey|ok|okay)?\s*(varonika|veronica|varonica|varunika|jarvis)[,\s!?.-]*",
         re.IGNORECASE,
     )
     def __init__(self, config: Config, state_manager: StateManager):
