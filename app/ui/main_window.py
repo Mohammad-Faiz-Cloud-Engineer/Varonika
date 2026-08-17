@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QLabel, QSystemTrayIcon, QMenu, QApplication, QComboBox
 )
 from PySide6.QtCore import Signal, QSignalBlocker
-from PySide6.QtGui import QAction, QIcon, QTextCursor, QTextDocument, QTextDocumentFragment
+from PySide6.QtGui import QAction, QIcon, QTextCursor, QTextDocument, QTextDocumentFragment, QTextBlockFormat
 import qasync
 from app.ui.ultron_brain import UltronBrain
 from app.conversation.state import AppState
@@ -224,12 +224,26 @@ class MainWindow(QMainWindow):
             QTextDocument.MarkdownFeature.MarkdownDialectGitHub,
         )
 
+    def _append_chat_block(self, html_text):
+        """Append a new chat block at the document end, breaking out of any
+        active list. Qt's append() copies the last block's format (including
+        list membership), so text appended after a markdown bullet response
+        would otherwise keep rendering as bullet points."""
+        cursor = self.chat_view.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        if not cursor.atBlockStart():
+            cursor.insertBlock()
+        fmt = QTextBlockFormat()
+        fmt.setObjectIndex(-1)
+        cursor.setBlockFormat(fmt)
+        cursor.insertHtml(html_text)
+
     def _on_ui_message(self, source, message):
         if source == "Varonika_stream":
             # Streaming chunk: append to the stream block (not document end,
             # so System notes appended mid-stream are never polluted)
             if self._stream_start is None:
-                self.chat_view.append(
+                self._append_chat_block(
                     '<span style="color:#4ec9b0; font-weight:bold;">Varonika:</span> '
                 )
                 cursor = self.chat_view.textCursor()
@@ -259,7 +273,7 @@ class MainWindow(QMainWindow):
                 self._stream_start = None
                 self._stream_end = None
             elif message:
-                self.chat_view.append(
+                self._append_chat_block(
                     '<span style="color:#4ec9b0; font-weight:bold;">Varonika:</span> '
                 )
                 cursor = self.chat_view.textCursor()
@@ -268,11 +282,11 @@ class MainWindow(QMainWindow):
         elif source == "User":
             self._stream_start = None
             self._stream_end = None
-            self.chat_view.append(
+            self._append_chat_block(
                 f'<span style="color:#569cd6; font-weight:bold;">You:</span> {html.escape(message)}'
             )
         elif source == "System":
-            self.chat_view.append(
+            self._append_chat_block(
                 f'<span style="color:#888;">{html.escape(message)}</span>'
             )
 
