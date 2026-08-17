@@ -22,7 +22,7 @@ class ConversationManager:
         self.config = config
         self.state = state_manager
 
-        self.audio = AudioCapture(chunk_size=1280)
+        self.audio = AudioCapture(chunk_size=1280, device_name=config.mic_device)
         self.wakeword = WakeWordDetector(config.wake_word_model, config.wake_word_threshold)
         self.stt = STTEngine(config.stt_model, config.energy_threshold, config.silence_timeout_ms / 1000.0, language=config.stt_language)
         self.tts = TTSEngine(voice=config.tts_voice, speed=config.tts_speed)
@@ -45,6 +45,14 @@ class ConversationManager:
         # arrives after a newer request already started.
         self._interrupt_gen = 0
         self._interrupt_lock = threading.Lock()
+        # Sequence of started requests. A request captures its sequence when
+        # it starts; only the newest request may restore the state machine
+        # after an interrupt. Without this, a slow ACP cancel can unwind a
+        # stale request after a newer one already started (and is waiting on
+        # the prompt lock in THINKING), and the stale request's
+        # _return_after_interrupt would yank the new request to LISTENING,
+        # silently dropping its answer.
+        self._request_seq = 0
         
         self._stream_lock = threading.Lock()
         self._transcribe_pool = ThreadPoolExecutor(max_workers=1)
@@ -89,6 +97,10 @@ class ConversationManager:
     def set_ui_callback(self, cb):
         self.ui_callback = cb
 
+    def set_mic_device(self, name: str):
+        """Switch the microphone the wake word and STT listen on (live)."""
+        self.audio.set_device(name)
+
     def activate_listening(self):
         """Enter listening mode from the hotkey: no follow-up timeout, waits as long as needed."""
         self._clear_follow_up()
@@ -108,6 +120,11 @@ class ConversationManager:
         """Stop speech and cancel any in-flight OpenCode request."""
         with self._interrupt_lock:
             self._interrupt_gen += 1
+            # The answer is dead: the audio callback may flip out of SPEAKING
+            # again. The generation-checked finally of the stale prompt task
+            # will not lower it, so an interrupt must: a stale-True flag would
+            # leave the state machine stuck in SPEAKING (no speech, no flip).
+            self._answer_in_flight = False
         self.tts.stop_and_clear()
         if self._loop and not self._loop.is_closed():
             asyncio.run_coroutine_threadsafe(self.opencode.cancel(), self._loop)
@@ -243,8 +260,14 @@ class ConversationManager:
                 self._clear_follow_up()
                 self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
 
-    def _return_after_interrupt(self):
-        """Restore listening mode after an interrupted prompt (hotkey activation: no follow-up window)."""
+    def _return_after_interrupt(self, request_seq: int):
+        """Restore listening mode after an interrupted prompt (hotkey activation: no follow-up window).
+
+        Only the newest request may restore: a stale request unwinding after a
+        newer one started must not move the state machine out from under it.
+        """
+        if request_seq != self._request_seq:
+            return
         if self.state.current in [AppState.THINKING, AppState.EXECUTING_TOOL]:
             self._clear_follow_up()
             self.state.set_state(AppState.LISTENING)
@@ -253,6 +276,8 @@ class ConversationManager:
     async def _process_command(self, text: str):
         with self._interrupt_lock:
             interrupt_gen = self._interrupt_gen
+            self._request_seq += 1
+            request_seq = self._request_seq
         if not self._opencode_started:
             self.tts.speak("OpenCode isn't available right now.")
             self.tts.signal_answer_end()
@@ -300,7 +325,7 @@ class ConversationManager:
                 with self._interrupt_lock:
                     was_interrupted = self._interrupt_gen > interrupt_gen
                 if was_interrupted:
-                    self._return_after_interrupt()
+                    self._return_after_interrupt(request_seq)
                     return
                 print(f"OpenCode error: {e}")
                 self.tts.speak("Sorry, there was an error communicating with OpenCode.")
@@ -313,7 +338,7 @@ class ConversationManager:
             with self._interrupt_lock:
                 was_interrupted = self._interrupt_gen > interrupt_gen
             if was_interrupted:
-                self._return_after_interrupt()
+                self._return_after_interrupt(request_seq)
                 return
 
             self.state.set_state(AppState.SPEAKING)

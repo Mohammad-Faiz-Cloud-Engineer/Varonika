@@ -16,6 +16,11 @@ class Config:
     # Below 1.0 speaks slower and articulates words more clearly.
     tts_speed: float = 0.9
     follow_up_timeout_ms: int = 2000
+    # Microphone for the wake word and STT. Empty = Windows default input
+    # device. Set this to the mic you use in TeamSpeak / Discord etc. (e.g.
+    # "Headset Microphone") so Varonika listens on that mic instead of the
+    # laptop's built-in one.
+    mic_device: str = ""
 
 def _resolve_model_path(path: str) -> str:
     """Anchor relative model paths to the project root regardless of CWD."""

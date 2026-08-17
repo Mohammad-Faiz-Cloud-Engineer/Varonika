@@ -1,11 +1,13 @@
 import html
+import threading
+import time
 from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QTextEdit, QLabel, QSystemTrayIcon, QMenu, QApplication
+    QTextEdit, QLabel, QSystemTrayIcon, QMenu, QApplication, QComboBox
 )
+from PySide6.QtCore import Signal, QSignalBlocker
 from PySide6.QtGui import QAction, QIcon, QTextCursor, QTextDocument, QTextDocumentFragment
-from PySide6.QtCore import Signal
 import qasync
 from app.ui.ultron_brain import UltronBrain
 from app.conversation.state import AppState
@@ -32,6 +34,8 @@ def load_app_icon() -> QIcon:
 class MainWindow(QMainWindow):
     ui_signal = Signal(str, str)
     state_signal = Signal(object)
+    # Delivered from the background mic refresh thread (queued to the UI thread)
+    mic_refresh_ready = Signal(list)
 
     def __init__(self, manager):
         super().__init__()
@@ -55,6 +59,28 @@ class MainWindow(QMainWindow):
         right_panel.setStyleSheet("background-color: #1a1a2e;")
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(12, 12, 12, 12)
+
+        # Mic selector: pick the microphone the wake word and STT listen
+        # on (e.g. the headset used in TeamSpeak), not the laptop mic.
+        mic_row = QWidget()
+        mic_layout = QHBoxLayout(mic_row)
+        mic_layout.setContentsMargins(0, 0, 0, 0)
+        mic_label = QLabel("Mic:")
+        mic_label.setStyleSheet("color: #888; font-size: 12px;")
+        self.mic_combo = QComboBox()
+        self.mic_combo.setStyleSheet(
+            "color: #e0e0e0; font-size: 12px; background: #0f0f23; "
+            "border: 1px solid #2a2a4a; border-radius: 4px; padding: 3px;"
+        )
+        mic_layout.addWidget(mic_label)
+        mic_layout.addWidget(self.mic_combo, stretch=1)
+        right_layout.addWidget(mic_row)
+
+        self.mic_in_use_label = QLabel("Mic in use: -")
+        self.mic_in_use_label.setStyleSheet(
+            "color: #00d4ff; font-size: 11px; padding: 0 0 6px 0;"
+        )
+        right_layout.addWidget(self.mic_in_use_label)
 
         self.status_label = QLabel("Status: LISTENING_FOR_WAKEWORD")
         self.status_label.setStyleSheet(
@@ -85,6 +111,20 @@ class MainWindow(QMainWindow):
         self._stream_start = None
         self._stream_end = None
 
+        self._populate_mic_devices()
+        self.mic_combo.currentTextChanged.connect(self._on_mic_changed)
+
+        # Bluetooth headsets connect and disconnect at any time: refresh the
+        # mic list in the background so new/removed mics appear without a
+        # restart. The availability probe opens devices, so it must never run
+        # on the UI thread.
+        self.mic_refresh_ready.connect(self._apply_mic_refresh)
+        self._mic_refresh_stop = threading.Event()
+        self._mic_refresh_thread = threading.Thread(
+            target=self._mic_refresh_loop, daemon=True
+        )
+        self._mic_refresh_thread.start()
+
         # Window + tray icon (Varonika logo; falls back to a stock icon
         # if the logo files are missing)
         app_icon = load_app_icon()
@@ -109,6 +149,71 @@ class MainWindow(QMainWindow):
 
     def _thread_safe_emit(self, source, message):
         self.ui_signal.emit(source, message)
+
+    def _mic_refresh_loop(self):
+        while not self._mic_refresh_stop.is_set():
+            time.sleep(10)
+            if self._mic_refresh_stop.is_set():
+                break
+            try:
+                devices = self.manager.audio.list_input_devices()
+            except Exception:
+                continue
+            self.mic_refresh_ready.emit(devices)
+
+    def _apply_mic_refresh(self, devices):
+        # Never rebuild the list under an open menu
+        if self.mic_combo.view().isVisible():
+            return
+        # Index 0 is the synthetic "System Default" item; compare only the
+        # real device entries
+        current = [self.mic_combo.itemData(i) for i in range(1, self.mic_combo.count())]
+        new = [data for _, data in devices]
+        if current == new:
+            return
+        self._populate_mic_devices(devices)
+        # The mic in use vanished (e.g. Bluetooth link dropped): fall back to
+        # the system default now instead of keeping a doomed stream, so the
+        # combo, the label, and the capture stream all agree.
+        if self.manager.audio.active_device and self.manager.audio.active_device not in new:
+            self.manager.set_mic_device("")
+            self._update_mic_in_use()
+
+    def _populate_mic_devices(self, devices=None):
+        if devices is None:
+            try:
+                devices = self.manager.audio.list_input_devices()
+            except Exception as e:
+                print(f"Mic enumeration failed: {e}")
+                return
+        try:
+            default_name = self.manager.audio.p.get_default_input_device_info()["name"]
+        except Exception:
+            default_name = None
+        with QSignalBlocker(self.mic_combo):
+            self.mic_combo.clear()
+            self.mic_combo.addItem("System Default", "")
+            key = self.manager.audio._dedupe_key
+            for idx, name in devices:
+                label = name + ("  (Default)" if default_name is not None and key(name) == key(default_name) else "")
+                self.mic_combo.addItem(label, name)
+            active = self.manager.audio.device_name
+            combo_idx = self.mic_combo.findData(active)
+            if combo_idx >= 0:
+                self.mic_combo.setCurrentIndex(combo_idx)
+        self._update_mic_in_use()
+
+    def _update_mic_in_use(self):
+        name = self.manager.audio.active_device
+        self.mic_in_use_label.setText(f"Mic in use: {name}")
+
+    def _on_mic_changed(self, _text):
+        name = self.mic_combo.currentData() or ""
+        try:
+            self.manager.set_mic_device(name)
+        except Exception as e:
+            print(f"Mic switch failed: {e}")
+        self._update_mic_in_use()
 
     def _thread_safe_state(self, old_state, new_state):
         self.state_signal.emit(new_state)
@@ -207,6 +312,7 @@ class MainWindow(QMainWindow):
     @qasync.asyncSlot()
     async def close_app(self):
         self._force_quit = True
+        self._mic_refresh_stop.set()
         try:
             import asyncio
             await asyncio.wait_for(self.manager.stop_async(), timeout=2.0)
