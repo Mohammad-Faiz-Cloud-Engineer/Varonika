@@ -2,7 +2,8 @@ from openwakeword.model import Model
 import numpy as np
 
 class WakeWordDetector:
-    def __init__(self, model_path: str, threshold: float = 0.5):
+    def __init__(self, model_path: str, threshold: float = 0.6):
+        self.threshold = threshold
         # Load the custom wake word model (no default models needed)
         try:
             self.model = Model(wakeword_models=[model_path], inference_framework="onnx")
