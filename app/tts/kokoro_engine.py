@@ -213,8 +213,15 @@ class TTSEngine:
                                 break
                             time.sleep(self._reverb_tail_tick)
                         tailed = True
+                        # Release the echo guard only if no new speech
+                        # arrived while this tail was sleeping (e.g. the
+                        # first sentence of the next answer): otherwise the
+                        # guard would drop mid-answer. Anything the producer
+                        # generated during the sleep also implies a new
+                        # enqueued item, so these checks are exact.
                         with self._lock:
-                            if self._speaking_owner == gen:
+                            if (self._speaking_owner == gen and self._pending_items == 0
+                                    and not self._producing and self._queue.empty()):
                                 self._speaking_owner = None
                     continue
                 if item is None:
@@ -269,6 +276,17 @@ class TTSEngine:
         """
         with self._lock:
             return self._speaking_owner == self._generation or self._pending_items > 0
+
+    def signal_answer_start(self):
+        """Mark that a new answer is beginning.
+
+        The reverb tail must wait for the end signal again: a previous
+        signal_answer_end (e.g. from the wake word ack) would otherwise
+        make the tail fire mid-answer whenever the LLM pauses between
+        sentences, dropping the echo guard while she is still speaking.
+        """
+        with self._lock:
+            self._answer_ended = False
 
     def signal_answer_end(self):
         """Tell the engine the current answer is finished.

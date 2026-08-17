@@ -55,6 +55,14 @@ class ConversationManager:
         self._follow_up_deadline = None
         self._follow_up_timeout = config.follow_up_timeout_ms / 1000.0
 
+        # True while a prompt is streaming to TTS. The audio callback must
+        # not treat "TTS momentarily idle" as "answer over" and flip the
+        # state machine out of SPEAKING: the LLM pauses between sentences
+        # (and before the first sentence is buffered), during which the
+        # queue is legitimately empty. Without this, streamed chunks get
+        # dropped mid-answer.
+        self._answer_in_flight = False
+
     def start(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
         self.tts.start_worker()
@@ -164,8 +172,12 @@ class ConversationManager:
 
             # Answer finished: once she actually stops talking, open the
             # follow-up listening window. (She shows "Speaking" while the
-            # answer plays, not "Listening".)
-            if current == AppState.SPEAKING and not self.tts.is_speaking():
+            # answer plays, not "Listening".) The in-flight flag keeps her
+            # in SPEAKING while a prompt is still streaming to TTS: between
+            # sentences the queue is legitimately empty, and flipping out of
+            # SPEAKING here would drop the remaining streamed chunks.
+            if (current == AppState.SPEAKING and not self.tts.is_speaking()
+                    and not self._answer_in_flight):
                 if self._follow_up_active:
                     self.state.set_state(AppState.LISTENING)
                     self.stt.reset()
@@ -273,52 +285,71 @@ class ConversationManager:
 
         with self._stream_lock:
             self._stream_buffer = ""
+        # A fresh answer: the reverb tail must not fire until the final
+        # flush below. Without this, a stale end signal (e.g. from the
+        # "Yes Boss" ack) lets the echo guard drop mid-answer, the state
+        # machine moves out of SPEAKING, and streamed chunks get dropped.
+        self.tts.signal_answer_start()
+        self._answer_in_flight = True
         self.state.set_state(AppState.THINKING)
 
         try:
-            full_response = await self.opencode.prompt(text)
-        except Exception as e:
+            try:
+                full_response = await self.opencode.prompt(text)
+            except Exception as e:
+                with self._interrupt_lock:
+                    was_interrupted = self._interrupt_gen > interrupt_gen
+                if was_interrupted:
+                    self._return_after_interrupt()
+                    return
+                print(f"OpenCode error: {e}")
+                self.tts.speak("Sorry, there was an error communicating with OpenCode.")
+                self.tts.signal_answer_end()
+                self._emit_ui("Varonika", f"Error: {e}")
+                self._clear_follow_up()
+                self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+                return
+
             with self._interrupt_lock:
                 was_interrupted = self._interrupt_gen > interrupt_gen
             if was_interrupted:
                 self._return_after_interrupt()
                 return
-            print(f"OpenCode error: {e}")
-            self.tts.speak("Sorry, there was an error communicating with OpenCode.")
+
+            self.state.set_state(AppState.SPEAKING)
+
+            # Flush any remaining buffered text to TTS
+            with self._stream_lock:
+                if self._stream_buffer.strip():
+                    clean = self._format_speech(self._stream_buffer)
+                    if clean.strip():
+                        self.tts.speak(clean.strip())
+                    self._stream_buffer = ""
+            # The answer is complete: the reverb tail may now run once the last
+            # sentence has played. Without this, the tail would fire mid-answer
+            # every time the LLM pauses between sentences.
             self.tts.signal_answer_end()
-            self._emit_ui("Varonika", f"Error: {e}")
-            self._clear_follow_up()
-            self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
-            return
 
-        with self._interrupt_lock:
-            was_interrupted = self._interrupt_gen > interrupt_gen
-        if was_interrupted:
-            self._return_after_interrupt()
-            return
+            # Show full response in UI
+            self._emit_ui("Varonika", full_response)
 
-        self.state.set_state(AppState.SPEAKING)
-
-        # Flush any remaining buffered text to TTS
-        with self._stream_lock:
-            if self._stream_buffer.strip():
-                clean = self._format_speech(self._stream_buffer)
-                if clean.strip():
-                    self.tts.speak(clean.strip())
-                self._stream_buffer = ""
-        # The answer is complete: the reverb tail may now run once the last
-        # sentence has played. Without this, the tail would fire mid-answer
-        # every time the LLM pauses between sentences.
-        self.tts.signal_answer_end()
-
-        # Show full response in UI
-        self._emit_ui("Varonika", full_response)
-
-        # Listen briefly for a follow-up once she finishes speaking, then go
-        # back to wake word mode. She shows "Speaking" while the answer plays;
-        # the audio callback switches her to "Listening" when TTS goes idle.
-        self._arm_follow_up()
-        self.stt.reset()
+            # Listen briefly for a follow-up once she finishes speaking, then go
+            # back to wake word mode. She shows "Speaking" while the answer plays;
+            # the audio callback switches her to "Listening" when TTS goes idle.
+            self._arm_follow_up()
+            self.stt.reset()
+        finally:
+            # Only this task may lower the flag. If an interrupt moved the
+            # generation, this answer is dead and a newer answer may already
+            # be streaming: lowering the flag here would let the audio
+            # callback flip out of SPEAKING mid-answer and drop its chunks
+            # (a slow ACP cancel can unwind a stale task after a newer
+            # prompt already started). A stale-True flag is harmless: the
+            # flip only applies in SPEAKING, and every new answer re-arms
+            # it before streaming.
+            with self._interrupt_lock:
+                if interrupt_gen == self._interrupt_gen:
+                    self._answer_in_flight = False
 
     def _format_speech(self, text: str) -> str:
         """Convert raw LLM output into speakable text."""
