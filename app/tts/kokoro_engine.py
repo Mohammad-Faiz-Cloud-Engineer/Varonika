@@ -77,6 +77,13 @@ class TTSEngine:
         words are never clipped at sentence boundaries. (sd.play per sentence
         restarts the device stream every sentence, and Windows eats the start
         of each restart: words come out chopped.)
+
+        Blocking write() is used, not a callback: write() paces itself in near
+        real time, so the device ring buffer stays full for the whole segment
+        and playback can never starve mid-word. Callback streams on MME get
+        invoked with scheduling jitter under CPU load (GIL contention), which
+        drops audio mid-word, and they underrun at stream start, which makes
+        Windows eat the first word of the first sentence.
         """
         with self._stream_lock:
             if self._stream is None:
@@ -114,8 +121,10 @@ class TTSEngine:
         # One producer thread and one prefetch queue for the whole worker
         # lifetime. The producer pulls sentences from the queue and generates
         # their audio while the worker plays the previous audio: so a full
-        # stop no longer waits for the next sentence to be synthesized.
-        prefetch = queue.Queue(maxsize=3)
+        # stop no longer waits for the next sentence to be synthesized. The
+        # queue is sized generously so short synthesis slowdowns (CPU
+        # contention) are absorbed instead of starving playback.
+        prefetch = queue.Queue(maxsize=16)
         IDLE = object()
 
         def _produce():
@@ -169,9 +178,18 @@ class TTSEngine:
                             return
                         if len(audio) == 0:
                             continue
+                        # Compress long silence runs here, in the producer:
+                        # the worker must never do CPU work between write()
+                        # calls. Blocking write() returns exactly when the
+                        # device buffer is drained, so any real work at a
+                        # sentence boundary (np slicing, concatenation) would
+                        # starve the device for tens of milliseconds and be
+                        # audible. Pre-compressed here, the worker's whole
+                        # boundary job is get() + write(): microseconds.
+                        seg = _compress_silences(np.asarray(audio, dtype=np.float32))
                         while True:
                             try:
-                                prefetch.put(audio, timeout=0.2)
+                                prefetch.put(seg, timeout=0.2)
                                 break
                             except queue.Full:
                                 # Worker is mid-playback; wait for room.
@@ -238,10 +256,11 @@ class TTSEngine:
                 tailed = False
                 if stream is None:
                     stream = self._get_stream()
-                # audio is a numpy array at 24000 sample rate; write() is
-                # inherently blocking and paces in near real time
+                # Item is already silence-compressed by the producer; audio
+                # is a numpy array at 24000 sample rate. write() is
+                # inherently blocking and paces in near real time.
                 try:
-                    stream.write(_compress_silences(np.asarray(item, dtype=np.float32)))
+                    stream.write(item)
                 except sd.PortAudioError:
                     # Expected when the stream was aborted by an interrupt
                     # or shutdown; anything else is a real device problem
