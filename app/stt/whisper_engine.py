@@ -8,7 +8,11 @@ class STTEngine:
     def __init__(self, model_path: str, energy_threshold: float = 0.015, silence_timeout: float = 2.5, language: str = "en"):
         # pywhispercpp supports ggml formats
         print(f"Loading Whisper model from {model_path}...")
-        self.model = Model(model_path, n_threads=4, print_realtime=False, print_progress=False, language=language)
+        try:
+            self.model = Model(model_path, n_threads=4, print_realtime=False, print_progress=False, language=language)
+        except Exception as e:
+            print(f"Error loading Whisper model: {e}")
+            self.model = None
         self.energy_threshold = energy_threshold
         self.silence_timeout = silence_timeout
 
@@ -97,7 +101,10 @@ class STTEngine:
 
             # Inference under the transcribe lock only: the audio buffer lock
             # is released so process_chunk can keep feeding new audio.
-            segments = self.model.transcribe(full_audio)
+            if self.model is None:
+                segments = []
+            else:
+                segments = self.model.transcribe(full_audio)
 
             with self._lock:
                 if my_gen != self._transcribe_gen:
