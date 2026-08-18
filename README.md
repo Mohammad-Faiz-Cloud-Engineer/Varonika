@@ -15,6 +15,7 @@ She can open apps, search the web, read files, run commands, and answer question
 - Talks to OpenCode, which runs on your machine too
 - Text to speech with Kokoro, so you hear the answer, not just read it
 - A small desktop window that shows what she is doing, what she heard, and what she said
+- Live microphone selection: pick which mic she listens on (e.g. your headset) right from the window
 - Hotkeys if you do not want to use your voice
 
 ## Requirements
@@ -75,13 +76,15 @@ After she answers she keeps listening for a short follow-up question. If you sta
 All settings have sensible defaults, but you can create a `config.yaml` next to the project root to override them:
 
 ```yaml
-wake_word_threshold: 0.5           # higher = harder to trigger
+wake_word_threshold: 0.6           # higher = harder to trigger
 stt_model: "models/ggml-small.en.bin"
 stt_language: "en"
 silence_timeout_ms: 2500           # pause before she stops listening
 energy_threshold: 0.015            # mic sensitivity
 tts_voice: "af_bella"              # Kokoro voice
+tts_speed: 0.9                     # below 1.0 speaks slower and more clearly
 follow_up_timeout_ms: 2000         # after an answer, go back to sleep if you stay silent this long
+mic_device: ""                     # e.g. "Headset Microphone"; empty = Windows default input device
 ```
 
 ## How it fits together
@@ -92,6 +95,7 @@ follow_up_timeout_ms: 2000         # after an answer, go back to sleep if you st
 - `app/opencode/client.py` talks to OpenCode over the ACP protocol
 - `app/conversation/manager.py` runs the state machine and ties it all together
 - `app/tts/kokoro_engine.py` turns the answer into spoken audio
+- `app/hotkeys/listener.py` listens for the Alt+Space hotkey
 - `app/ui/main_window.py` is the little status window
 
 ## Troubleshooting
@@ -100,7 +104,7 @@ follow_up_timeout_ms: 2000         # after an answer, go back to sleep if you st
 
 **OpenCode stops responding after a big answer.** This was a bug in the data line limit. The connection now allows very large messages, so long tool results no longer kill the link.
 
-**Nothing happens when you say the wake word.** Check that the console shows the wake word model loaded, and that your mic is the default input device. If you are using the placeholder model, you must say "Hey Jarvis".
+**Nothing happens when you say the wake word.** Check that the console shows the wake word model loaded, and that the window's mic dropdown points at the mic you are actually speaking into (use "System Default" to let Windows decide). If you are using the placeholder model, you must say "Hey Jarvis".
 
 ## Notes
 
