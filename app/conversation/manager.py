@@ -192,9 +192,39 @@ class ConversationManager:
             self._stream_buffer += chunk
             self._emit_ui("Varonika_stream", chunk)
 
-            # Buffer sentences for TTS. We only split on major punctuation to ensure 
-            # the chunks are large enough that audio playback doesn't outrun LLM generation.
-            sentences = re.split(r'(?<=[.!?\n])\s+', self._stream_buffer)
+            # Strip complete code blocks and inline code from the TTS buffer
+            # so they don't mess up sentence splitting.
+            while True:
+                match = re.search(r'```[\s\S]*?```', self._stream_buffer)
+                if not match:
+                    break
+                self._stream_buffer = self._stream_buffer[:match.start()] + " I've generated the code. " + self._stream_buffer[match.end():]
+
+            while True:
+                match = re.search(r'`[^`]+`', self._stream_buffer)
+                if not match:
+                    break
+                self._stream_buffer = self._stream_buffer[:match.start()] + " code snippet " + self._stream_buffer[match.end():]
+
+            # Check if there is an open code block (starts with ``` but not closed)
+            open_code_idx = self._stream_buffer.find('```')
+            if open_code_idx != -1:
+                safe_text = self._stream_buffer[:open_code_idx]
+                unsafe_text = self._stream_buffer[open_code_idx:]
+            else:
+                # Check for open inline code
+                open_inline_idx = self._stream_buffer.find('`')
+                if open_inline_idx != -1:
+                    safe_text = self._stream_buffer[:open_inline_idx]
+                    unsafe_text = self._stream_buffer[open_inline_idx:]
+                else:
+                    safe_text = self._stream_buffer
+                    unsafe_text = ""
+
+            # Buffer sentences for TTS. We only split on major punctuation and newlines
+            # to ensure the chunks are large enough. We preserve newlines so Kokoro
+            # can use them for pacing.
+            sentences = re.split(r'(?<=[.!?])[ \t]+|(?<=\n)', safe_text)
                 
             if len(sentences) > 1:
                 # Combine tiny fragments (like short bullet points) into
@@ -221,7 +251,9 @@ class ConversationManager:
                     if clean.strip():
                         self.tts.speak(clean.strip())
                         
-                self._stream_buffer = sentences[-1]
+                self._stream_buffer = sentences[-1] + unsafe_text
+            else:
+                self._stream_buffer = safe_text + unsafe_text
 
     def _on_tool_start(self, title: str, tool_call_id: str):
         # A stale request's tool events must not drive the state machine or
@@ -459,8 +491,12 @@ class ConversationManager:
         """Convert raw LLM output into speakable text."""
         # Remove code blocks
         text = re.sub(r'```[\s\S]*?```', ' I\'ve generated the code. ', text)
+        # Remove unclosed code blocks at the end
+        text = re.sub(r'```[\s\S]*$', ' I\'ve generated the code. ', text)
         # Remove inline code
         text = re.sub(r'`[^`]+`', ' code snippet ', text)
+        # Remove unclosed inline code at the end
+        text = re.sub(r'`[^`]*$', ' code snippet ', text)
         # Remove markdown headers. Anchored to the line start so inline '#'
         # characters are kept (without this, "C#" would be spoken as "C").
         text = re.sub(r'(?m)^\s*#+\s*', '', text)
@@ -472,8 +508,8 @@ class ConversationManager:
         text = re.sub(r'https?://\S+', 'a link', text)
         # Remove bullet points
         text = re.sub(r'^\s*[-*]\s+', '', text, flags=re.MULTILINE)
-        # Collapse whitespace
-        text = re.sub(r'\s+', ' ', text)
+        # Collapse spaces and tabs, but keep newlines for TTS pacing
+        text = re.sub(r'[ \t]+', ' ', text)
         return text.strip()
 
     async def stop_async(self):
