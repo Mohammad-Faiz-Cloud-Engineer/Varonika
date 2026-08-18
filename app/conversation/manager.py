@@ -150,14 +150,31 @@ class ConversationManager:
             self._stream_buffer += chunk
             self._emit_ui("Varonika_stream", chunk)
 
-            # Buffer sentences for TTS
-            sentences = re.split(r'(?<=[.!?])\s+', self._stream_buffer)
+            # Buffer sentences for TTS. We only split on major punctuation to ensure 
+            # the chunks are large enough that audio playback doesn't outrun LLM generation.
+            sentences = re.split(r'(?<=[.!?\n])\s+', self._stream_buffer)
+                
             if len(sentences) > 1:
-                # All but the last are complete sentences
+                # Combine tiny fragments (like short bullet points) to prevent TTS starvation
+                # caused by the overhead of processing many small chunks.
+                combined = []
+                current = ""
                 for s in sentences[:-1]:
+                    current += s + " "
+                    if len(current.strip()) >= 50:
+                        combined.append(current.strip())
+                        current = ""
+                        
+                # If there's leftover combined text, it's a complete parsed clause,
+                # so we can safely flush it as a chunk even if it's < 50 chars.
+                if current.strip():
+                    combined.append(current.strip())
+
+                for s in combined:
                     clean = self._format_speech(s)
                     if clean.strip():
                         self.tts.speak(clean.strip())
+                        
                 self._stream_buffer = sentences[-1]
 
     def _on_tool_start(self, title: str, tool_call_id: str):
