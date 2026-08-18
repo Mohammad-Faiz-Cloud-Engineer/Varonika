@@ -67,6 +67,20 @@ This fetches:
 
 If the tool fails to download the speech-to-text model (`ggml-small`), [download the model](https://github.com/Mohammad-Faiz-Cloud-Engineer/Varonika/releases/download/ggml-small/ggml-small.bin).
 
+### Using a different speech-to-text model
+
+By default Varonika uses the multilingual `small` Whisper model. You can switch to any other Whisper model just by dropping its file into the `models/` folder:
+
+`tiny.en`, `tiny`, `base.en`, `base`, `small.en`, `small`, `medium.en`, `medium`, `large-v1`, `large-v2`, `large-v3`, `large-v3-turbo`
+
+The file must be named `ggml-<name>.bin` (for example `ggml-large-v3.bin`, download it from the [Whisper.cpp model collection](https://huggingface.co/ggerganov/whisper.cpp)). On startup the app checks the folder: if it finds any of these files it uses them, and if several are present it picks the strongest. The downloader also skips fetching the default when a model is already there.
+
+To pin a specific model regardless of what is in the folder, set it explicitly in `config.yaml`:
+
+```yaml
+stt_model: "models/ggml-large-v3.bin"
+```
+
 After downloading, copy or move the model to:
 
 `Varonika/models/`

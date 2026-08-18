@@ -34,16 +34,21 @@ def download_file(url, destination):
 
 def main():
     base_dir = Path(__file__).parent.parent
+    sys.path.insert(0, str(base_dir))
+    from app.config.settings import detect_stt_model
     models_dir = base_dir / "models"
     models_dir.mkdir(exist_ok=True)
-    
-    # Download Whisper Model
-    whisper_model = models_dir / "ggml-small.bin"
-    if not whisper_model.exists():
+
+    # Download Whisper Model. Any recognized ggml-*.bin in models/ counts:
+    # a user who dropped in their own model (tiny, base, large-v3, ...)
+    # must not be forced to download the default small as well.
+    whisper_model = detect_stt_model(models_dir)
+    if whisper_model is None:
+        target = models_dir / "ggml-small.bin"
         whisper_url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
-        download_file(whisper_url, whisper_model)
+        download_file(whisper_url, target)
     else:
-        print("Whisper model already exists.")
+        print(f"Whisper model already present: {Path(whisper_model).name}")
 
     # Download OpenWakeWord Model: prefer the custom 'Hey Varonika' model
     # if present at the project root, otherwise fetch a placeholder so the
