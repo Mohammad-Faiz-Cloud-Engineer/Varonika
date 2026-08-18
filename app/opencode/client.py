@@ -1,6 +1,8 @@
 import asyncio
 import os
+from pathlib import Path
 from typing import Any
+from app.config.settings import BASE_DIR
 from acp import RequestError, spawn_agent_process
 from acp.schema import (
     AgentMessageChunk, ToolCallStart,
@@ -131,8 +133,16 @@ class OpenCodeClient:
             print(f"Warning: Failed to get current model: {e}")
             return "unknown"
 
-    async def start(self, cwd: str = "."):
-        """Starts the OpenCode ACP process and connects to it via stdio."""
+    async def start(self, cwd: str | None = None):
+        """Starts the OpenCode ACP process and connects to it via stdio.
+
+        The working directory is anchored to the project root (where
+        AGENTS.md lives): OpenCode loads it from there. A relative cwd
+        like "." would resolve against wherever the app happened to be
+        launched from (e.g. a desktop shortcut), silently losing the
+        agent instructions.
+        """
+        cwd = str(Path(cwd).resolve()) if cwd else str(BASE_DIR)
         print("Starting OpenCode ACP server...")
         import shutil
         opencode_exe = shutil.which("opencode") or "opencode"
@@ -156,10 +166,11 @@ class OpenCodeClient:
             self.connection = None
             raise
 
-    async def reset_session(self, cwd: str = "."):
+    async def reset_session(self, cwd: str | None = None):
         """Creates a new fresh session and swaps the current context."""
         if not self.connection:
             raise RuntimeError("OpenCode not connected")
+        cwd = str(Path(cwd).resolve()) if cwd else str(BASE_DIR)
         async with self._prompt_lock:
             # Try to close old session gracefully if possible
             if self.session_id:
