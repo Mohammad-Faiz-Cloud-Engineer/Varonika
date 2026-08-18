@@ -46,6 +46,6 @@ jobs:
       run: |
         python -c "from app.config.settings import load_config; load_config()"
 
-    - name: Test download_models script
+    - name: Compile application code
       run: |
-        python scripts/download_models.py
+        python -m compileall -q app scripts

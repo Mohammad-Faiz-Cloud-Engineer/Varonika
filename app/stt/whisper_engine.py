@@ -58,12 +58,16 @@ class STTEngine:
             return False
 
         with self._lock:
-            self.audio_buffer.append(audio_float)
             if energy > self.energy_threshold:
                 self.last_speech_time = time.monotonic()
                 self.speech_seen = True
+            # Silence before the first spoken chunk has no transcription value.
+            # Keeping it made a hotkey activation with no speech grow forever.
+            if not self.speech_seen:
+                return False
+            self.audio_buffer.append(audio_float)
 
-            if self.speech_seen and (time.monotonic() - self.last_speech_time > self.silence_timeout):
+            if time.monotonic() - self.last_speech_time > self.silence_timeout:
                 return True # Ready to transcribe
         return False
 

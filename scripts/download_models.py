@@ -1,10 +1,17 @@
 import urllib.request
 import shutil
 import sys
+import os
+import tempfile
 from pathlib import Path
 
 def download_file(url, destination):
     print(f"Downloading {url} to {destination}...")
+    fd, temp_path = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".part", dir=destination.parent
+    )
+    os.close(fd)
+    temp_path = Path(temp_path)
     
     # We use a progress bar
     def reporthook(count, block_size, total_size):
@@ -14,10 +21,13 @@ def download_file(url, destination):
             sys.stdout.flush()
 
     try:
-        urllib.request.urlretrieve(url, destination, reporthook=reporthook)
+        urllib.request.urlretrieve(url, temp_path, reporthook=reporthook)
+        temp_path.replace(destination)
         print("\nDownload complete.")
     except Exception as e:
+        temp_path.unlink(missing_ok=True)
         print(f"\nFailed to download {url}: {e}")
+        raise RuntimeError(f"Could not download model from {url}") from e
 
 def main():
     base_dir = Path(__file__).parent.parent
