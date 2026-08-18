@@ -182,8 +182,8 @@ class AudioCapture:
                 pass
         return (in_data, pyaudio.paContinue)
 
-    def _worker_loop(self):
-        while not self._stop_event.is_set():
+    def _worker_loop(self, stop_event):
+        while not stop_event.is_set():
             try:
                 audio_np = self.queue.get(timeout=0.1)
                 if audio_np is None:
@@ -205,12 +205,12 @@ class AudioCapture:
         if self.p is None:
             self.p = pyaudio.PyAudio()
 
-        self._stop_event.clear()
+        self._stop_event = threading.Event()
         self.is_listening = True
         
         # Start background worker thread
         if self.worker_thread is None or not self.worker_thread.is_alive():
-            self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+            self.worker_thread = threading.Thread(target=self._worker_loop, args=(self._stop_event,), daemon=True)
             self.worker_thread.start()
 
         try:
