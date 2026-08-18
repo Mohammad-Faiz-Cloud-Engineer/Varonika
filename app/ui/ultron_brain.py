@@ -1,9 +1,12 @@
 import math
 import random
 from PySide6.QtWidgets import QWidget
-from PySide6.QtGui import QPainter, QColor, QPen, QBrush
-from PySide6.QtCore import QTimer, Qt, QPointF
+from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath
+from PySide6.QtCore import QTimer, Qt, QPointF, QRectF
 from app.conversation.state import AppState
+
+# Corner radius of the brain card, matching the right panel.
+CORNER_RADIUS = 16
 
 class UltronBrain(QWidget):
     def __init__(self):
@@ -25,7 +28,11 @@ class UltronBrain(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Background
+        # Clip everything to the rounded card so the mesh never bleeds out
+        # of the corners, then fill the card background.
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(self.rect()), CORNER_RADIUS, CORNER_RADIUS)
+        painter.setClipPath(path)
         painter.fillRect(self.rect(), QColor(10, 10, 15))
 
         self.time += 0.05
@@ -94,5 +101,14 @@ class UltronBrain(QWidget):
         painter.setBrush(QBrush(orb_color))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QPointF(center_x, center_y), radius, radius)
+
+        # Card border, matching the right panel's outline.
+        painter.setClipping(False)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor(42, 42, 74)))
+        painter.drawRoundedRect(
+            QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+            CORNER_RADIUS, CORNER_RADIUS,
+        )
 
         painter.end()

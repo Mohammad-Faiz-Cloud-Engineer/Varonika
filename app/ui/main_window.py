@@ -48,8 +48,10 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         layout = QHBoxLayout(central)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        # A little breathing room around the two cards so the rounded
+        # corners read as separate panels against the window background.
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
 
         # Left panel (Brain)
         self.brain = UltronBrain()
@@ -57,7 +59,10 @@ class MainWindow(QMainWindow):
 
         # Right panel (Chat & Status)
         right_panel = QWidget()
-        right_panel.setStyleSheet("background-color: #1a1a2e;")
+        right_panel.setStyleSheet(
+            "background-color: #1a1a2e; border-radius: 16px; "
+            "border: 1px solid #2a2a4a;"
+        )
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(12, 12, 12, 12)
 
@@ -71,7 +76,7 @@ class MainWindow(QMainWindow):
         self.mic_combo = QComboBox()
         self.mic_combo.setStyleSheet(
             "color: #e0e0e0; font-size: 12px; background: #0f0f23; "
-            "border: 1px solid #2a2a4a; border-radius: 4px; padding: 3px;"
+            "border: 1px solid #2a2a4a; border-radius: 8px; padding: 3px;"
         )
         mic_layout.addWidget(mic_label)
         mic_layout.addWidget(self.mic_combo, stretch=1)
@@ -96,6 +101,11 @@ class MainWindow(QMainWindow):
         self.vol_slider.setValue(int(self.manager.config.tts_volume * 100))
         self.vol_slider.setStyleSheet(
             "color: #00d4ff; font-size: 12px; background: #0f0f23;"
+            "QSlider::groove:horizontal { height: 6px; border-radius: 3px;"
+            " background: #2a2a4a; }"
+            "QSlider::handle:horizontal { width: 14px; height: 14px;"
+            " margin: -4px 0; border-radius: 7px; background: #00d4ff;"
+            " border: 1px solid #0f0f23; }"
         )
         self.vol_value = QLabel(f"{self.vol_slider.value() / 100:.1f}x")
         self.vol_value.setStyleSheet("color: #e0e0e0; font-size: 12px;")
@@ -109,15 +119,20 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel("Status: LISTENING_FOR_WAKEWORD")
         self.status_label.setStyleSheet(
             "color: #00d4ff; font-weight: bold; font-size: 13px; "
-            "padding: 6px; background: #0f0f23; border-radius: 4px;"
+            "padding: 6px; background: #0f0f23; border-radius: 8px;"
         )
         right_layout.addWidget(self.status_label)
 
         self.chat_view = QTextEdit()
         self.chat_view.setReadOnly(True)
+        # No visible scrollbars: scroll with the mouse wheel or a touchpad
+        # gesture, so the chat area keeps its full rounded width.
+        self.chat_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.chat_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.chat_view.setStyleSheet(
             "background-color: #0f0f23; color: #e0e0e0; font-size: 14px; "
-            "font-family: 'Segoe UI', sans-serif; border: none; padding: 8px;"
+            "font-family: 'Segoe UI', sans-serif; border: 1px solid #2a2a4a; "
+            "border-radius: 10px; padding: 8px;"
         )
         right_layout.addWidget(self.chat_view)
 
@@ -168,8 +183,8 @@ class MainWindow(QMainWindow):
         self.tray.setContextMenu(tray_menu)
         self.tray.show()
 
-        # Window style
-        self.setStyleSheet("background-color: #16213e;")
+        # Window style: a deep background so the two rounded cards stand out
+        self.setStyleSheet("background-color: #0d1023;")
 
     def _thread_safe_emit(self, source, message):
         self.ui_signal.emit(source, message)
@@ -388,7 +403,7 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"Status: {state.name}")
         self.status_label.setStyleSheet(
             f"color: {color}; font-weight: bold; font-size: 13px; "
-            f"padding: 6px; background: #0f0f23; border-radius: 4px;"
+            f"padding: 6px; background: #0f0f23; border-radius: 8px;"
         )
         self.brain.set_state(state)
 
