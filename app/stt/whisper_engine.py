@@ -79,7 +79,7 @@ class STTEngine:
                     self.audio_buffer = []
                     self.speech_seen = False
                     self.last_speech_time = time.monotonic()
-                    return ""
+                    return None
 
                 # pywhispercpp expects float32 np array
                 full_audio = np.concatenate(self.audio_buffer)
