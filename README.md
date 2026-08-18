@@ -24,6 +24,28 @@ She can open apps, search the web, read files, run commands, and answer question
 - Python 3.11 or 3.12 (Python 3.13+ is not currently supported due to underlying dependency constraints)
 - The `opencode` CLI installed and available on your PATH (this is the brain she talks to)
 
+### Install OpenCode first
+
+OpenCode is the brain behind Varonika. She has no built-in LLM of her own, so you must install and set up OpenCode before she can answer anything. Install it with one of these (pick the one for your package manager):
+
+```bash
+npm install -g opencode-ai
+```
+
+```bash
+bun install -g opencode-ai
+```
+
+```bash
+yarn global add opencode-ai
+```
+
+```bash
+pnpm install -g opencode-ai
+```
+
+Once installed, configure which LLM OpenCode should use (a cloud provider, or a local model via LM Studio, see [LMStudio.md](LMStudio.md)).
+
 > **Note for Linux Users:** On Linux (Ubuntu), Python 3.12 is currently not supported. This is because the `openwakeword` dependency requires `tflite-runtime` on Linux, which does not have pre-built wheels for Python 3.12. Please use Python 3.11 on Linux.
 
 ## Setup
