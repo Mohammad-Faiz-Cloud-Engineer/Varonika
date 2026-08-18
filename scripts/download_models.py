@@ -38,9 +38,9 @@ def main():
     models_dir.mkdir(exist_ok=True)
     
     # Download Whisper Model
-    whisper_model = models_dir / "ggml-small.en.bin"
+    whisper_model = models_dir / "ggml-small.bin"
     if not whisper_model.exists():
-        whisper_url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin"
+        whisper_url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
         download_file(whisper_url, whisper_model)
     else:
         print("Whisper model already exists.")

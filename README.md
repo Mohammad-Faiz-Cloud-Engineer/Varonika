@@ -62,10 +62,10 @@ python scripts/download_models.py
 
 This fetches:
 
-- `models/ggml-small.en.bin` (Whisper speech to text model)
+- `models/ggml-small.bin` (Whisper speech to text model)
 - `models/wakeword.onnx` (wake word model)
 
-If the tool fails to download the Text-to-Speech model (`ggml-small.en`), [download the model](https://github.com/Mohammad-Faiz-Cloud-Engineer/Varonika/releases/download/ggml-small.en/ggml-small.en.bin).
+If the tool fails to download the speech-to-text model (`ggml-small`), [download the model](https://github.com/Mohammad-Faiz-Cloud-Engineer/Varonika/releases/download/ggml-small/ggml-small.bin).
 
 After downloading, copy or move the model to:
 
@@ -111,7 +111,7 @@ All settings have sensible defaults, but you can create a `config.yaml` next to 
 
 ```yaml
 wake_word_threshold: 0.6           # higher = harder to trigger
-stt_model: "models/ggml-small.en.bin"
+stt_model: "models/ggml-small.bin"
 stt_language: "en"
 silence_timeout_ms: 2500           # pause before she stops listening
 energy_threshold: 0.015            # mic sensitivity
