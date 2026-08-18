@@ -59,7 +59,8 @@ class VaronikaClient:
         # selecting the first (which could be a deny the agent never asked for).
         allow_id = next((o.option_id for o in options if o.kind.startswith("allow")), None)
         if allow_id is None:
-            print(f"Permission request denied: no allow option offered for {tool_call.title}")
+            title = getattr(tool_call, "title", None) or "unknown tool"
+            print(f"Permission request denied: no allow option offered for {title}")
             return RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
         return RequestPermissionResponse(outcome=AllowedOutcome(outcome="selected", option_id=allow_id))
 
