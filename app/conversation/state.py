@@ -21,7 +21,8 @@ class StateManager:
 
     @property
     def current(self) -> AppState:
-        return self._state
+        with self._lock:
+            return self._state
 
     def add_listener(self, callback):
         with self._lock:

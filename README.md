@@ -6,7 +6,7 @@
 
 Varonika is a hands free voice assistant for your PC. You say "Hey Varonika", she listens, asks OpenCode to do the work, and speaks the answer back to you.
 
-She can open apps, search the web, read files, run commands, and answer questions. She runs fully on your machine, in the background, and only starts listening after you say the wake word.
+She can open apps, search the web, read files, run commands, and answer questions. Voice processing runs on your machine; the LLM is whichever local or cloud provider OpenCode is configured to use. She runs in the background and only starts listening after you say the wake word.
 
 ## What it does
 

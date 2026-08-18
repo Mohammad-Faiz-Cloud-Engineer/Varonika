@@ -397,7 +397,7 @@ class ConversationManager:
         return text.strip()
 
     async def stop_async(self):
-        self.audio.stop()
+        self.audio.close()
         self.tts.stop()
         if self.hotkeys:
             self.hotkeys.stop()

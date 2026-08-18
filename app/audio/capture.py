@@ -125,7 +125,7 @@ class AudioCapture:
         rule only applies when one name is exactly 31 chars and a prefix
         of the other."""
         w, c = wanted.lower(), candidate_name.lower()
-        if w == c or w in c or c in w:
+        if w == c:
             return True
         return (len(c) == 31 and w.startswith(c)) or (len(w) == 31 and c.startswith(w))
 

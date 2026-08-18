@@ -147,8 +147,10 @@ class TTSEngine:
                     if stamp != self._generation:
                         # Enqueued before the last interrupt: it was already
                         # invalidated, drop it rather than speak the tail of
-                        # a cancelled request.
-                        return
+                        # a cancelled request.  Do not stop the producer: an
+                        # old worker can requeue one stale item after the new
+                        # worker has started, with valid speech behind it.
+                        continue
                     if self._stop_event.is_set() or gen != self._generation or producer_stop_event.is_set():
                         # A newer worker owns the queue now. Hand the item
                         # back rather than dropping it: a request spoken

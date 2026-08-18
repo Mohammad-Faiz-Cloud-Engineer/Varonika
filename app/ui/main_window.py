@@ -175,7 +175,8 @@ class MainWindow(QMainWindow):
         # The mic in use vanished (e.g. Bluetooth link dropped): fall back to
         # the system default now instead of keeping a doomed stream, so the
         # combo, the label, and the capture stream all agree.
-        if self.manager.audio.active_device and self.manager.audio.active_device not in new:
+        if (self.manager.audio.device_name and self.manager.audio.active_device
+                not in new):
             self.manager.set_mic_device("")
             self._update_mic_in_use()
 
