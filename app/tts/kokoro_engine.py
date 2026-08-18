@@ -81,8 +81,16 @@ def _pick_output_device():
                 if "wasapi" not in api:
                     continue
                 name = d["name"]
-                if name.lower() == default_name.lower() or (
-                        len(name) == 31 and default_name.lower().startswith(name.lower())):
+                # PortAudio truncates MME names to 31 chars while WASAPI
+                # names arrive untruncated, so an exact comparison never
+                # matches ("Headphones (realme TechLife Bud" vs "...Buds
+                # T100)"). Compare by prefix in both directions: either
+                # side may be the truncated one. All WASAPI outputs on a
+                # machine are distinct in their first chars, so a prefix
+                # match cannot pick the wrong device.
+                a = name.lower()
+                b = default_name.lower()
+                if a.startswith(b) or b.startswith(a):
                     try:
                         s = sd.OutputStream(
                             samplerate=int(d["default_samplerate"]),
