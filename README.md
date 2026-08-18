@@ -43,6 +43,18 @@ This fetches:
 - `models/ggml-small.en.bin` (Whisper speech to text model)
 - `models/wakeword.onnx` (wake word model)
 
+If the tool fails to download the Text-to-Speech model (`ggml-small.en`), [download the model](https://github.com/Mohammad-Faiz-Cloud-Engineer/Varonika/releases/download/ggml-small.en/ggml-small.en.bin).
+
+After downloading, copy or move the model to:
+
+`Varonika/models/`
+
+Then start the tool with:
+
+```bash
+python app/main.py
+```
+
 If you have your own trained wake word model, drop it at the project root as `Hey_Varonika.onnx` and the script will copy it into place. Without a custom model, the script downloads a placeholder that responds to "Hey Jarvis" instead.
 
 To choose which LLM she uses (including your own custom model), see [LLM_SETUP.md](LLM_SETUP.md).
