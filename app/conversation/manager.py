@@ -155,18 +155,22 @@ class ConversationManager:
             sentences = re.split(r'(?<=[.!?\n])\s+', self._stream_buffer)
                 
             if len(sentences) > 1:
-                # Combine tiny fragments (like short bullet points) to prevent TTS starvation
-                # caused by the overhead of processing many small chunks.
+                # Combine tiny fragments (like short bullet points) into
+                # larger chunks. Every chunk pays a fixed synthesis tax
+                # (phonemization + model warmup), so fewer, longer chunks
+                # keep the TTS producer ahead of playback and avoid pauses
+                # at chunk boundaries.
                 combined = []
                 current = ""
                 for s in sentences[:-1]:
                     current += s + " "
-                    if len(current.strip()) >= 50:
+                    if len(current.strip()) >= 150:
                         combined.append(current.strip())
                         current = ""
                         
-                # If there's leftover combined text, it's a complete parsed clause,
-                # so we can safely flush it as a chunk even if it's < 50 chars.
+                # If there's leftover combined text, it's a complete parsed
+                # clause: flush it as a chunk even if it's below the
+                # threshold (the LLM's next sentence may be slow to arrive).
                 if current.strip():
                     combined.append(current.strip())
 
