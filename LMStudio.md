@@ -43,7 +43,6 @@ If you have a small GPU, start with the 7B. You can always switch models later, 
 The server runs at `http://localhost:1234/v1`. Keep the window open; if you close LM Studio, the server stops.
 
 > **Context length matters for agents.** OpenCode works like an agent: it sends the task, your project files, and tool results back and forth. That eats context fast. Set the context length to at least **16384** (16K) if your RAM allows, more is better. Too little context causes confusing failures mid-task.
-
 > **Auth:** by default LM Studio needs no API key. Only set one if you enabled "API token" in the server settings. The "Serve on Local Network" option is only needed if you want another computer to reach this server.
 
 ## Step 3: find the exact model ID
@@ -152,7 +151,7 @@ She should answer with the local model name. From then on, all her answers come 
 
 ## Quick reference
 
-```
+```text
 Your voice -> Varonika (Whisper) -> OpenCode -> LM Studio local model (http://127.0.0.1:1234/v1) -> answer back
 ```
 

@@ -4,7 +4,7 @@ Varonika does not have her own built-in brain. She talks to **OpenCode** running
 
 ## How it works
 
-```
+```text
 Your voice  ->  Varonika (Whisper)  ->  OpenCode (ACP)  ->  LLM provider  ->  answer back to you
 ```
 
