@@ -10,6 +10,13 @@ def download_file(url, destination):
     print(f"Downloading {url} to {destination}...")
     # A dead or blocked network must fail fast, not hang the app at startup.
     socket.setdefaulttimeout(60)
+    # A previously killed download (app closed mid-startup) leaves an orphan
+    # .part behind; clean those up so they cannot accumulate on disk.
+    for stale in destination.parent.glob(f".{destination.name}.*.part"):
+        try:
+            stale.unlink()
+        except OSError:
+            pass
     fd, temp_path = tempfile.mkstemp(
         prefix=f".{destination.name}.", suffix=".part", dir=destination.parent
     )

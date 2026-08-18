@@ -46,7 +46,11 @@ def save_config_field(key: str, value) -> bool:
         data = {}
         if config_path.exists():
             with open(config_path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
+                loaded = yaml.safe_load(f)
+                # A hand-edited config containing a scalar or a list (e.g.
+                # just a stray number) must not crash the app: ignore it.
+                if isinstance(loaded, dict):
+                    data = loaded
         data[key] = value
         with open(config_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(data, f, sort_keys=False, default_flow_style=False)
@@ -61,16 +65,19 @@ def load_config() -> Config:
     try:
         if config_path.exists():
             with open(config_path, "r") as f:
-                data = yaml.safe_load(f) or {}
-                for k, v in data.items():
-                    if hasattr(c, k):
-                        default_val = getattr(c, k)
-                        expected_type = type(default_val)
-                        try:
-                            cast_val = expected_type(v)
-                            setattr(c, k, cast_val)
-                        except (ValueError, TypeError):
-                            print(f"Warning: Could not cast config '{k}' value '{v}' to {expected_type.__name__}. Using default.")
+                loaded = yaml.safe_load(f)
+                # A hand-edited config containing a scalar or a list (e.g.
+                # just a stray number) must not crash the app: ignore it.
+                if isinstance(loaded, dict):
+                    for k, v in loaded.items():
+                        if hasattr(c, k):
+                            default_val = getattr(c, k)
+                            expected_type = type(default_val)
+                            try:
+                                cast_val = expected_type(v)
+                                setattr(c, k, cast_val)
+                            except (ValueError, TypeError):
+                                print(f"Warning: Could not cast config '{k}' value '{v}' to {expected_type.__name__}. Using default.")
     except yaml.YAMLError as e:
         print(f"YAML Error loading config: {e}")
     except OSError as e:

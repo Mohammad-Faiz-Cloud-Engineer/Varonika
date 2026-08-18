@@ -111,6 +111,10 @@ class ConversationManager:
         (device vanished, every mic failed) must not overwrite the user's
         saved preference with "" on a transient Bluetooth dropout."""
         self.audio.set_device(name)
+        # Drop audio buffered from the old mic and invalidate any in-flight
+        # transcription: words recorded on the previous device must never be
+        # recognized as the user's command after the switch.
+        self.stt.reset()
         if persist:
             self.config.mic_device = name
             save_config_field("mic_device", name)
@@ -371,6 +375,18 @@ class ConversationManager:
         try:
             try:
                 full_response = await self.opencode.prompt(text)
+            except asyncio.CancelledError:
+                # An ACP cancel can kill the in-flight prompt task with
+                # CancelledError (a BaseException in Python 3.11+, so the
+                # generic except below would never see it). Without this
+                # branch the task would die silently and the state machine
+                # would stick in THINKING forever: no wake word, no hotkey,
+                # no recognition. The request is dead either way, so restore
+                # listening mode.
+                with self._interrupt_lock:
+                    was_interrupted = self._interrupt_gen > interrupt_gen
+                self._return_after_interrupt(request_seq)
+                return
             except Exception as e:
                 with self._interrupt_lock:
                     was_interrupted = self._interrupt_gen > interrupt_gen

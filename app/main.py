@@ -55,7 +55,12 @@ def main():
 
     hotkeys = HotkeyListener(manager)
     manager.hotkeys = hotkeys
-    hotkeys.start()
+    try:
+        hotkeys.start()
+    except Exception as e:
+        # A blocked global hotkey registration (driver interference, locked
+        # session) must not brick startup: the wake word still works.
+        print(f"WARNING: Could not register hotkeys ({e}); wake word still works.")
 
     # Pass the running loop so the manager can schedule coroutines
     manager.start(loop)
