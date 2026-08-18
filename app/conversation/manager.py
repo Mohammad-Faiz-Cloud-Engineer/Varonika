@@ -15,7 +15,7 @@ from app.config.settings import Config, save_config_field
 
 class ConversationManager:
     _WAKE_PHRASE_RE = re.compile(
-        r"^\s*(hey|ok|okay)?\s*(varonika|veronica|varonica|varunika|jarvis)[,\s!?.-]*",
+        r"^\s*(hey|ok|okay)?\s*(varonika|veronica|varonica|varunika|veronika|jarvis)[,\s!?.-]*",
         re.IGNORECASE,
     )
     def __init__(self, config: Config, state_manager: StateManager):
@@ -104,13 +104,16 @@ class ConversationManager:
     def set_ui_callback(self, cb):
         self.ui_callback = cb
 
-    def set_mic_device(self, name: str):
-        """Switch the microphone the wake word and STT listen on (live),
-        and persist the choice so the next launch starts on the same mic
-        instead of silently reverting to the system default."""
+    def set_mic_device(self, name: str, persist: bool = True):
+        """Switch the microphone the wake word and STT listen on (live).
+
+        Persists the choice unless persist=False: automatic fallbacks
+        (device vanished, every mic failed) must not overwrite the user's
+        saved preference with "" on a transient Bluetooth dropout."""
         self.audio.set_device(name)
-        self.config.mic_device = name
-        save_config_field("mic_device", name)
+        if persist:
+            self.config.mic_device = name
+            save_config_field("mic_device", name)
 
     def _on_mic_fallback(self, requested: str, actual: str):
         print(f"Mic '{requested}' unavailable; wake word and STT now listen on '{actual}'.")
@@ -158,7 +161,14 @@ class ConversationManager:
     def _on_stream_text(self, chunk: str):
         """Called from the ACP client when a text chunk arrives from OpenCode."""
         # Chunks can straggle in after an interrupt while the cancel is in
-        # flight. The answer is dead: never speak (or buffer) its tail.
+        # flight. The answer is dead: never speak (or buffer) its tail. The
+        # state alone is not enough: right after an interrupt the state is
+        # still THINKING/SPEAKING, so a straggler would pass the state check
+        # and speak the cancelled answer's tail. _answer_in_flight is False
+        # the moment an interrupt (or the answer's own finally) runs, and it
+        # only goes True again when the next answer starts streaming.
+        if not self._answer_in_flight:
+            return
         if self.state.current not in [AppState.THINKING, AppState.EXECUTING_TOOL, AppState.SPEAKING]:
             return
             

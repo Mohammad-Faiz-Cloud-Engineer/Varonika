@@ -11,6 +11,7 @@ from PySide6.QtGui import QAction, QIcon, QTextCursor, QTextDocument, QTextDocum
 import qasync
 from app.ui.ultron_brain import UltronBrain
 from app.conversation.state import AppState
+from app.config.settings import save_config_field
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
@@ -91,6 +92,7 @@ class MainWindow(QMainWindow):
         self.vol_label.setStyleSheet("color: #888; font-size: 12px;")
         self.vol_slider = QSlider(Qt.Orientation.Horizontal)
         self.vol_slider.setRange(50, 500)
+        self._last_vol_save = 0.0
         self.vol_slider.setValue(int(self.manager.config.tts_volume * 100))
         self.vol_slider.setStyleSheet(
             "color: #00d4ff; font-size: 12px; background: #0f0f23;"
@@ -102,6 +104,7 @@ class MainWindow(QMainWindow):
         vol_layout.addWidget(self.vol_value)
         right_layout.addWidget(vol_row)
         self.vol_slider.valueChanged.connect(self._on_volume_changed)
+        self.vol_slider.sliderReleased.connect(self._persist_volume)
 
         self.status_label = QLabel("Status: LISTENING_FOR_WAKEWORD")
         self.status_label.setStyleSheet(
@@ -199,16 +202,18 @@ class MainWindow(QMainWindow):
             self._update_mic_in_use()
         # The mic in use vanished (e.g. Bluetooth link dropped): fall back to
         # the system default now instead of keeping a doomed stream, so the
-        # combo, the label, and the capture stream all agree.
+        # combo, the label, and the capture stream all agree. The fallback
+        # must not overwrite the user's saved mic choice in config.yaml.
         if (self.manager.audio.device_name and self.manager.audio.active_device
                 not in new):
-            self.manager.set_mic_device("")
+            self.manager.set_mic_device("", persist=False)
+            self.sync_mic_combo()
             self._update_mic_in_use()
         # Every mic failed to open (e.g. the headset powered off mid-switch):
         # retry the system default on the next refresh so a recovered mic is
         # picked up without restarting the app.
         if self.manager.audio.active_device == "Unavailable":
-            self.manager.set_mic_device("")
+            self.manager.set_mic_device("", persist=False)
             self.sync_mic_combo()
             self._update_mic_in_use()
 
@@ -273,6 +278,21 @@ class MainWindow(QMainWindow):
             self.manager.tts.set_volume(boost)
         except Exception as e:
             print(f"Volume set failed: {e}")
+        # Writing config.yaml on every slider tick would hammer the disk:
+        # persist at most once per second while dragging, and the release
+        # handler below guarantees the final position is always saved.
+        now = time.monotonic()
+        if now - self._last_vol_save >= 1.0:
+            self._last_vol_save = now
+            self._persist_volume()
+
+    def _persist_volume(self):
+        boost = self.vol_slider.value() / 100.0
+        self.manager.config.tts_volume = boost
+        try:
+            save_config_field("tts_volume", boost)
+        except Exception as e:
+            print(f"Volume save failed: {e}")
 
     def _thread_safe_state(self, old_state, new_state):
         self.state_signal.emit(new_state)
