@@ -117,6 +117,12 @@ class OpenCodeClient:
         # Serializes prompts/resets: two concurrent requests on one session
         # would corrupt the accumulated stream and confuse the agent.
         self._prompt_lock = asyncio.Lock()
+        # Sequence of the request whose prompt is currently streaming. Set
+        # right before a prompt is sent; streamed chunks that arrive while a
+        # NEWER request has already started belong to a cancelled answer
+        # (the ACP server keeps streaming until the old prompt completes),
+        # and the manager uses this to drop them.
+        self._stream_seq = None
 
     async def get_current_model(self) -> str:
         """Fetches the currently configured OpenCode model (cached after first lookup)."""
@@ -192,13 +198,15 @@ class OpenCodeClient:
         model = await self.get_current_model()
         print(f"OpenCode session reset. New ID: {self.session_id} (Model: {model})")
 
-    async def prompt(self, text: str) -> str:
+    async def prompt(self, text: str, stream_seq=None) -> str:
         """Send a prompt and wait for completion. Streamed chunks arrive via session_update."""
         if not self.connection or not self.session_id:
             raise RuntimeError("OpenCode not connected")
 
         async with self._prompt_lock:
             self.varonika_client._accumulated_text = ""
+            # Chunks that arrive from this point on belong to this request.
+            self._stream_seq = stream_seq
             content = [TextContentBlock(type="text", text=text)]
 
             resp = await self.connection.prompt(

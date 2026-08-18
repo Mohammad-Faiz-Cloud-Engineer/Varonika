@@ -173,6 +173,15 @@ class ConversationManager:
         # only goes True again when the next answer starts streaming.
         if not self._answer_in_flight:
             return
+        # The ACP server ignores cancels: a cancelled request keeps streaming
+        # until its prompt completes. If a NEWER request already started, the
+        # streamed chunk belongs to the cancelled answer, not to the newer
+        # one (which is still waiting on the prompt lock). Without this
+        # check the cancelled answer's tail would be spoken as the new
+        # answer and flip the state machine out of THINKING. _stream_seq is
+        # set by OpenCodeClient.prompt() right before the request is sent.
+        if self.opencode._stream_seq != self._request_seq:
+            return
         if self.state.current not in [AppState.THINKING, AppState.EXECUTING_TOOL, AppState.SPEAKING]:
             return
             
@@ -215,6 +224,10 @@ class ConversationManager:
                 self._stream_buffer = sentences[-1]
 
     def _on_tool_start(self, title: str, tool_call_id: str):
+        # A stale request's tool events must not drive the state machine or
+        # the UI after a newer request took over (same rule as _on_stream_text).
+        if self.opencode._stream_seq != self._request_seq:
+            return
         self.state.set_state(AppState.EXECUTING_TOOL)
         self._emit_ui("System", f"Tool: {title}")
 
@@ -374,7 +387,7 @@ class ConversationManager:
 
         try:
             try:
-                full_response = await self.opencode.prompt(text)
+                full_response = await self.opencode.prompt(text, stream_seq=request_seq)
             except asyncio.CancelledError:
                 # An ACP cancel can kill the in-flight prompt task with
                 # CancelledError (a BaseException in Python 3.11+, so the
