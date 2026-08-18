@@ -83,6 +83,7 @@ silence_timeout_ms: 2500           # pause before she stops listening
 energy_threshold: 0.015            # mic sensitivity
 tts_voice: "af_bella"              # Kokoro voice
 tts_speed: 0.9                     # below 1.0 speaks slower and more clearly
+tts_volume: 1.0                    # TTS loudness boost, 0.5x to 5.0x (slider in the window too)
 follow_up_timeout_ms: 2000         # after an answer, go back to sleep if you stay silent this long
 mic_device: ""                     # e.g. "Headset Microphone"; empty = Windows default input device
 ```

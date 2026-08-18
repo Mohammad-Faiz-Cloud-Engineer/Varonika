@@ -15,6 +15,9 @@ class Config:
     tts_voice: str = "af_bella"
     # Below 1.0 speaks slower and articulates words more clearly.
     tts_speed: float = 0.9
+    # TTS loudness boost, applied to the audio before playback (1.0 = normal,
+    # 2.0 = twice as loud). The desktop window has a slider for this too.
+    tts_volume: float = 1.0
     follow_up_timeout_ms: int = 2000
     # Microphone for the wake word and STT. Empty = Windows default input
     # device. Set this to the mic you use in TeamSpeak / Discord etc. (e.g.

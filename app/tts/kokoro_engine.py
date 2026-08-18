@@ -34,9 +34,13 @@ def _compress_silences(audio: np.ndarray) -> np.ndarray:
     return np.concatenate(parts) if parts else audio
 
 class TTSEngine:
-    def __init__(self, voice="af_bella", speed=0.9):
+    def __init__(self, voice="af_bella", speed=0.9, volume=1.0):
         self.voice = voice
         self.speed = speed
+        # Loudness boost (1.0 = unchanged). Read on the worker thread under
+        # the lock and applied to every audio block before playback, so a
+        # slider move in the UI takes effect from the next block on.
+        self._volume = float(volume)
         # Ensure we have the language model, a = American English
         self.pipeline = KPipeline(lang_code='a') 
         self._stop_event = threading.Event()
@@ -243,7 +247,14 @@ class TTSEngine:
                 # audio is a numpy array at 24000 sample rate; write() is
                 # inherently blocking and paces in near real time
                 try:
-                    stream.write(_compress_silences(np.asarray(item, dtype=np.float32)))
+                    audio = _compress_silences(np.asarray(item, dtype=np.float32))
+                    with self._lock:
+                        vol = self._volume
+                    if vol != 1.0:
+                        # Boost loudness; clip so the audio card never gets
+                        # samples beyond full scale (which would crackle).
+                        audio = np.clip(audio * vol, -1.0, 1.0)
+                    stream.write(audio)
                 except sd.PortAudioError:
                     # Expected when the stream was aborted by an interrupt
                     # or shutdown; anything else is a real device problem
@@ -259,6 +270,11 @@ class TTSEngine:
             with self._lock:
                 if self._speaking_owner == gen:
                     self._speaking_owner = None
+
+    def set_volume(self, volume: float):
+        """Adjust the loudness boost. Applies from the next audio block on."""
+        with self._lock:
+            self._volume = max(0.0, float(volume))
 
     def speak(self, text: str):
         """Enqueue text to be spoken."""

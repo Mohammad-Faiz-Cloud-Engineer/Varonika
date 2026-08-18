@@ -25,7 +25,7 @@ class ConversationManager:
         self.audio = AudioCapture(chunk_size=1280, device_name=config.mic_device)
         self.wakeword = WakeWordDetector(config.wake_word_model, config.wake_word_threshold)
         self.stt = STTEngine(config.stt_model, config.energy_threshold, config.silence_timeout_ms / 1000.0, language=config.stt_language)
-        self.tts = TTSEngine(voice=config.tts_voice, speed=config.tts_speed)
+        self.tts = TTSEngine(voice=config.tts_voice, speed=config.tts_speed, volume=config.tts_volume)
         self.opencode = OpenCodeClient()
 
         self.audio.add_callback(self._on_audio_chunk)

@@ -4,9 +4,9 @@ import time
 from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QTextEdit, QLabel, QSystemTrayIcon, QMenu, QApplication, QComboBox
+    QTextEdit, QLabel, QSystemTrayIcon, QMenu, QApplication, QComboBox, QSlider
 )
-from PySide6.QtCore import Signal, QSignalBlocker
+from PySide6.QtCore import Signal, QSignalBlocker, Qt
 from PySide6.QtGui import QAction, QIcon, QTextCursor, QTextDocument, QTextDocumentFragment, QTextBlockFormat
 import qasync
 from app.ui.ultron_brain import UltronBrain
@@ -81,6 +81,27 @@ class MainWindow(QMainWindow):
             "color: #00d4ff; font-size: 11px; padding: 0 0 6px 0;"
         )
         right_layout.addWidget(self.mic_in_use_label)
+
+        # TTS volume boost: she speaks too quietly on some setups even with
+        # the system volume maxed, so boost the audio itself, not the OS.
+        vol_row = QWidget()
+        vol_layout = QHBoxLayout(vol_row)
+        vol_layout.setContentsMargins(0, 0, 0, 0)
+        self.vol_label = QLabel("TTS Vol:")
+        self.vol_label.setStyleSheet("color: #888; font-size: 12px;")
+        self.vol_slider = QSlider(Qt.Orientation.Horizontal)
+        self.vol_slider.setRange(50, 500)
+        self.vol_slider.setValue(int(self.manager.config.tts_volume * 100))
+        self.vol_slider.setStyleSheet(
+            "color: #00d4ff; font-size: 12px; background: #0f0f23;"
+        )
+        self.vol_value = QLabel(f"{self.vol_slider.value() / 100:.1f}x")
+        self.vol_value.setStyleSheet("color: #e0e0e0; font-size: 12px;")
+        vol_layout.addWidget(self.vol_label)
+        vol_layout.addWidget(self.vol_slider, stretch=1)
+        vol_layout.addWidget(self.vol_value)
+        right_layout.addWidget(vol_row)
+        self.vol_slider.valueChanged.connect(self._on_volume_changed)
 
         self.status_label = QLabel("Status: LISTENING_FOR_WAKEWORD")
         self.status_label.setStyleSheet(
@@ -215,6 +236,14 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Mic switch failed: {e}")
         self._update_mic_in_use()
+
+    def _on_volume_changed(self, value):
+        boost = value / 100.0
+        self.vol_value.setText(f"{boost:.1f}x")
+        try:
+            self.manager.tts.set_volume(boost)
+        except Exception as e:
+            print(f"Volume set failed: {e}")
 
     def _thread_safe_state(self, old_state, new_state):
         self.state_signal.emit(new_state)
