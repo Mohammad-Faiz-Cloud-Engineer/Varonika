@@ -10,7 +10,7 @@ from app.wakeword.detector import WakeWordDetector
 from app.stt.whisper_engine import STTEngine
 from app.tts.kokoro_engine import TTSEngine
 from app.opencode.client import OpenCodeClient
-from app.config.settings import Config
+from app.config.settings import Config, save_config_field
 
 
 class ConversationManager:
@@ -29,6 +29,10 @@ class ConversationManager:
         self.opencode = OpenCodeClient()
 
         self.audio.add_callback(self._on_audio_chunk)
+        # Both the wake word and the STT consume the same single microphone
+        # stream; when that mic cannot be opened the app falls back to the
+        # system default, and this surfaces that switch in the UI.
+        self.audio.on_fallback = self._on_mic_fallback
         self.ui_callback = None
         self._loop = None
         self._opencode_started = False
@@ -75,6 +79,9 @@ class ConversationManager:
         self._loop = loop
         self.tts.start_worker()
         self.audio.start()
+        # One stream feeds both consumers: the wake word and the STT can
+        # never hear different microphones.
+        print(f"Wake word and STT listening on: {self.audio.active_device}")
         
         # Start dynamic noise floor calibration (e.g. 2 seconds)
         self.stt.start_calibration(duration_sec=2.0)
@@ -98,8 +105,20 @@ class ConversationManager:
         self.ui_callback = cb
 
     def set_mic_device(self, name: str):
-        """Switch the microphone the wake word and STT listen on (live)."""
+        """Switch the microphone the wake word and STT listen on (live),
+        and persist the choice so the next launch starts on the same mic
+        instead of silently reverting to the system default."""
         self.audio.set_device(name)
+        self.config.mic_device = name
+        save_config_field("mic_device", name)
+
+    def _on_mic_fallback(self, requested: str, actual: str):
+        print(f"Mic '{requested}' unavailable; wake word and STT now listen on '{actual}'.")
+        self._emit_ui(
+            "System",
+            f"Mic '{requested}' could not be opened, so I am using '{actual}' instead. "
+            f"Wake word and STT both listen on '{actual}'.",
+        )
 
     def activate_listening(self):
         """Enter listening mode from the hotkey: no follow-up timeout, waits as long as needed."""

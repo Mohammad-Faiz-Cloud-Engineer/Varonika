@@ -52,6 +52,9 @@ def main():
 
     # Pass the running loop so the manager can schedule coroutines
     manager.start(loop)
+    # The mic stream opened inside manager.start(): show the device that
+    # actually opened (the configured mic, or the fallback default).
+    window.sync_mic_combo()
     window.show()
 
     with loop:

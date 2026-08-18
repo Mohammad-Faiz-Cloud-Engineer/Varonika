@@ -17,6 +17,9 @@ class AudioCapture:
         self.queue = queue.Queue(maxsize=50)
         self.worker_thread = None
         self._stop_event = threading.Event()
+        # Called as on_fallback(requested_name, actual_name) when the chosen
+        # microphone cannot be opened and the system default is used instead.
+        self.on_fallback = None
 
     def _canonical_name(self, index: int) -> str:
         """Full display name for a device index. PortAudio reports MME
@@ -224,11 +227,16 @@ class AudioCapture:
                 except Exception as e:
                     last_error = e
                     self.stream = None
+            fell_back_to = None
             if self.stream is None:
                 # No matching entry opened (or no device was selected):
-                # fall back to the system default input device.
+                # fall back to the system default input device. The request
+                # is dropped so the app state, the UI, and the real stream
+                # always agree on one microphone for wake word and STT.
                 if last_error:
                     print(f"Mic '{self.device_name}' could not be opened ({last_error}), trying the system default.")
+                fell_back_to = self.device_name
+                self.device_name = ""
                 self.stream = self.p.open(
                     format=pyaudio.paInt16,
                     channels=1,
@@ -241,6 +249,10 @@ class AudioCapture:
             self.active_device = self._canonical_name(opened_index) \
                 if opened_index is not None else self._default_device_name()
             print(f"Audio input device: {self.active_device}")
+            # Only announce the fallback after the default stream is truly
+            # running, with the device that actually opened.
+            if fell_back_to and self.on_fallback:
+                self.on_fallback(fell_back_to, self.active_device)
         except Exception as e:
             print(f"Error opening audio stream: {e}")
             self.is_listening = False

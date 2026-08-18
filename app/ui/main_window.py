@@ -190,9 +190,13 @@ class MainWindow(QMainWindow):
         # real device entries
         current = [self.mic_combo.itemData(i) for i in range(1, self.mic_combo.count())]
         new = [data for _, data in devices]
-        if current == new:
-            return
-        self._populate_mic_devices(devices)
+        if current != new:
+            self._populate_mic_devices(devices)
+        else:
+            # The device list is unchanged, but the stream may have fallen
+            # back to the system default: keep the combo showing the truth.
+            self.sync_mic_combo()
+            self._update_mic_in_use()
         # The mic in use vanished (e.g. Bluetooth link dropped): fall back to
         # the system default now instead of keeping a doomed stream, so the
         # combo, the label, and the capture stream all agree.
@@ -200,6 +204,34 @@ class MainWindow(QMainWindow):
                 not in new):
             self.manager.set_mic_device("")
             self._update_mic_in_use()
+        # Every mic failed to open (e.g. the headset powered off mid-switch):
+        # retry the system default on the next refresh so a recovered mic is
+        # picked up without restarting the app.
+        if self.manager.audio.active_device == "Unavailable":
+            self.manager.set_mic_device("")
+            self.sync_mic_combo()
+            self._update_mic_in_use()
+
+    def _display_device(self):
+        """Name of the microphone the app listens on (or is about to use).
+        Before the stream opens show the requested device; when every mic
+        failed to open, show 'Unavailable' instead of claiming a mic."""
+        audio = self.manager.audio
+        if audio.stream is not None:
+            return audio.active_device
+        if audio.active_device == "Unavailable":
+            return "Unavailable"
+        return audio.device_name or audio.active_device
+
+    def sync_mic_combo(self):
+        """Show the microphone the capture actually uses: the open stream's
+        device, or the requested device before the stream has opened."""
+        active = self._display_device()
+        combo_idx = self.mic_combo.findData(active)
+        if combo_idx < 0:
+            combo_idx = 0  # "System Default"
+        with QSignalBlocker(self.mic_combo):
+            self.mic_combo.setCurrentIndex(combo_idx)
 
     def _populate_mic_devices(self, devices=None):
         if devices is None:
@@ -219,15 +251,11 @@ class MainWindow(QMainWindow):
             for idx, name in devices:
                 label = name + ("  (Default)" if default_name is not None and key(name) == key(default_name) else "")
                 self.mic_combo.addItem(label, name)
-            active = self.manager.audio.device_name
-            combo_idx = self.mic_combo.findData(active)
-            if combo_idx >= 0:
-                self.mic_combo.setCurrentIndex(combo_idx)
+        self.sync_mic_combo()
         self._update_mic_in_use()
 
     def _update_mic_in_use(self):
-        name = self.manager.audio.active_device
-        self.mic_in_use_label.setText(f"Mic in use: {name}")
+        self.mic_in_use_label.setText(f"Mic in use: {self._display_device()}")
 
     def _on_mic_changed(self, _text):
         name = self.mic_combo.currentData() or ""
@@ -235,6 +263,7 @@ class MainWindow(QMainWindow):
             self.manager.set_mic_device(name)
         except Exception as e:
             print(f"Mic switch failed: {e}")
+        self.sync_mic_combo()
         self._update_mic_in_use()
 
     def _on_volume_changed(self, value):

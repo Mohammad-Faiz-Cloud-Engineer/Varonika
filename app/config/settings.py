@@ -32,6 +32,29 @@ def _resolve_model_path(path: str) -> str:
         p = BASE_DIR / p
     return str(p)
 
+def save_config_field(key: str, value) -> bool:
+    """Persist one config field to config.yaml, preserving existing keys.
+
+    The app's config file is optional and user-local (gitignored). Runtime
+    choices like the selected microphone are written back so they survive a
+    restart; without this the app silently falls back to the system default
+    mic on every launch. Returns False on failure so callers can warn
+    without breaking the live change that already happened.
+    """
+    config_path = BASE_DIR / "config.yaml"
+    try:
+        data = {}
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        data[key] = value
+        with open(config_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(data, f, sort_keys=False, default_flow_style=False)
+        return True
+    except (OSError, yaml.YAMLError) as e:
+        print(f"Warning: could not save config '{key}': {e}")
+        return False
+
 def load_config() -> Config:
     config_path = BASE_DIR / "config.yaml"
     c = Config()
