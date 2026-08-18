@@ -4,13 +4,11 @@ import threading
 class AppState(Enum):
     IDLE = auto()
     LISTENING_FOR_WAKEWORD = auto()
-    WAKEWORD_DETECTED = auto()
     LISTENING = auto()
     TRANSCRIBING = auto()
     THINKING = auto()
     EXECUTING_TOOL = auto()
     SPEAKING = auto()
-    INTERRUPTED = auto()
     ERROR = auto()
 
 class StateManager:

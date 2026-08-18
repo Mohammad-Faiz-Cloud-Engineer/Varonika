@@ -299,7 +299,11 @@ class TTSEngine:
                 continue
             if item is None:
                 # Poison pill from stop(): leave without re-queuing so a
-                # later start_worker never wedges on it.
+                # later start_worker never wedges on it. Clear the counters
+                # so is_speaking() can never read as True after shutdown.
+                with self._lock:
+                    self._pending_items = 0
+                    self._speaking_owner = None
                 return
             stamp, text = item
             with self._lock:

@@ -432,8 +432,9 @@ class ConversationManager:
         text = re.sub(r'```[\s\S]*?```', ' I\'ve generated the code. ', text)
         # Remove inline code
         text = re.sub(r'`[^`]+`', ' code snippet ', text)
-        # Remove markdown headers
-        text = re.sub(r'#+\s*', '', text)
+        # Remove markdown headers. Anchored to the line start so inline '#'
+        # characters are kept (without this, "C#" would be spoken as "C").
+        text = re.sub(r'(?m)^\s*#+\s*', '', text)
         # Remove markdown bold/italic
         text = re.sub(r'\*{1,3}(.*?)\*{1,3}', r'\1', text)
         # Remove markdown links, keep text

@@ -376,13 +376,11 @@ class MainWindow(QMainWindow):
     def _on_state_change(self, state):
         state_colors = {
             AppState.LISTENING_FOR_WAKEWORD: "#888",
-            AppState.WAKEWORD_DETECTED: "#00ffff",
             AppState.LISTENING: "#00ff66",
             AppState.TRANSCRIBING: "#ff9900",
             AppState.THINKING: "#cc66ff",
             AppState.EXECUTING_TOOL: "#ff6600",
             AppState.SPEAKING: "#00ccff",
-            AppState.INTERRUPTED: "#ff4444",
             AppState.ERROR: "#ff0000",
             AppState.IDLE: "#555",
         }

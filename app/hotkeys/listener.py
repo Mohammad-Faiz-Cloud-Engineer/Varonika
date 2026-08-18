@@ -23,6 +23,12 @@ class HotkeyListener:
             if current == AppState.SPEAKING:
                 self.manager.interrupt()
             self.manager.activate_listening()
+        elif current == AppState.LISTENING:
+            # Already listening: restart the listen window so a stale or
+            # stuck capture is cleared, and tell the user it registered.
+            print("Hotkey pressed: Resetting listening window.")
+            self.manager.activate_listening()
+            self.manager._emit_ui("System", "Listening (hotkey): say your command.")
         elif current == AppState.TRANSCRIBING:
             print("Hotkey pressed: Cancelling in-flight transcription.")
             self.manager.activate_listening()

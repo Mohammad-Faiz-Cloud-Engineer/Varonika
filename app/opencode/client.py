@@ -54,7 +54,13 @@ class VaronikaClient:
         """Always approve: permissions are auto-approved by OpenCode."""
         if not options:
             return RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
-        allow_id = next((o.option_id for o in options if o.kind.startswith("allow")), options[0].option_id)
+        # Pick the first allow-kind option. If OpenCode offered only deny
+        # options, approving is wrong: deny explicitly instead of blindly
+        # selecting the first (which could be a deny the agent never asked for).
+        allow_id = next((o.option_id for o in options if o.kind.startswith("allow")), None)
+        if allow_id is None:
+            print(f"Permission request denied: no allow option offered for {tool_call.title}")
+            return RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
         return RequestPermissionResponse(outcome=AllowedOutcome(outcome="selected", option_id=allow_id))
 
     async def read_text_file(self, path: str, session_id: str, **kwargs: Any) -> ReadTextFileResponse:

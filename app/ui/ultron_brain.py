@@ -38,10 +38,6 @@ class UltronBrain(QWidget):
         if self.state == AppState.LISTENING_FOR_WAKEWORD:
             color = QColor(0, 100, 200, 100)
             pulse_speed = 0.5
-        elif self.state == AppState.WAKEWORD_DETECTED:
-            color = QColor(0, 255, 255)
-            pulse_speed = 3.0
-            line_thickness = 3
         elif self.state == AppState.LISTENING:
             color = QColor(0, 255, 100)
             pulse_speed = 2.0
@@ -60,9 +56,6 @@ class UltronBrain(QWidget):
         elif self.state == AppState.ERROR:
             color = QColor(255, 0, 0)
             pulse_speed = 0.5
-        elif self.state == AppState.INTERRUPTED:
-            color = QColor(255, 68, 68)
-            pulse_speed = 1.0
         
         w, h = self.width(), self.height()
         center_x, center_y = w / 2, h / 2

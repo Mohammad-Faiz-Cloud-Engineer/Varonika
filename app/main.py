@@ -21,7 +21,14 @@ def check_models():
     dl_script = os.path.join(scripts_dir, "download_models.py")
     if os.path.exists(dl_script):
         print("Checking models...")
-        subprocess.run([sys.executable, dl_script], check=True)
+        try:
+            subprocess.run([sys.executable, dl_script], check=True, timeout=600)
+        except Exception as e:
+            # A failed download (no network, blocked site) must not crash the
+            # app or block startup: warn and let the user place the models
+            # manually (see README), then start anyway.
+            print(f"WARNING: Model download failed ({e}).")
+            print("Download the models manually and place them in the models/ folder, then restart.")
 
 
 def main():
