@@ -1,5 +1,6 @@
 import numpy as np
 from pywhispercpp.model import Model
+import re
 import time
 import threading
 
@@ -101,8 +102,15 @@ class STTEngine:
             with self._lock:
                 if my_gen != self._transcribe_gen:
                     return None
-            text = "".join([segment.text for segment in segments]).strip()
-            return text
+            # Whisper splits long speech into segments whose texts do not
+            # carry their leading or trailing spaces. Joining them with
+            # nothing glues sentences together ("buddy?Can"), so join with a
+            # space, then repair any punctuation left glued to the next word
+            # ("privacy,meanwhile" -> "privacy, meanwhile"). The lookahead
+            # only matches a letter, so decimals like "3.14" stay untouched.
+            text = " ".join(segment.text.strip() for segment in segments)
+            text = re.sub(r'([.!?,;:])(?=[A-Za-z])', r'\1 ', text)
+            return text.strip()
 
     def reset(self):
         with self._lock:
