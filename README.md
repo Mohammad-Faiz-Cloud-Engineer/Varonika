@@ -91,6 +91,7 @@ All setup guides live in the [Setup Docs](Setup%20Docs/) folder:
 - [PLAYWRIGHT_SETUP.md](Setup%20Docs/PLAYWRIGHT_SETUP.md): give her browser control with Playwright
 - [CHROME_DEVTOOLS_SETUP.md](Setup%20Docs/CHROME_DEVTOOLS_SETUP.md): test websites in a real Chrome with Chrome DevTools MCP
 - [GOOGLE_MCP_SETUP.md](Setup%20Docs/GOOGLE_MCP_SETUP.md): give her access to your Gmail, Calendar, Drive, Docs, and Sheets
+- [MEMORY_SETUP.md](Setup%20Docs/MEMORY_SETUP.md): give her a memory so she remembers you and past fixes between sessions
 
 ## Running
 
