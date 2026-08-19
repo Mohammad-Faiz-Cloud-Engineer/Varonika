@@ -119,7 +119,7 @@ After she answers she keeps listening for a short follow-up question. If you sta
 
 ## Configuration
 
-All settings have sensible defaults, but you can create a `config.yaml` next to the project root to override them:
+All settings have sensible defaults, but you can create a `config.yaml` in the project root to override them:
 
 ```yaml
 wake_word_threshold: 0.6           # higher = harder to trigger

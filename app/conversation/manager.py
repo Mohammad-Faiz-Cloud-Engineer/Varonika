@@ -485,8 +485,6 @@ class ConversationManager:
                 # would stick in THINKING forever: no wake word, no hotkey,
                 # no recognition. The request is dead either way, so restore
                 # listening mode.
-                with self._interrupt_lock:
-                    was_interrupted = self._interrupt_gen > interrupt_gen
                 self._return_after_interrupt(request_seq)
                 return
             except Exception as e:

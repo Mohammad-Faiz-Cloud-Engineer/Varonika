@@ -68,7 +68,10 @@ def _pick_output_device():
         devs = sd.query_devices()
         default_idx = sd.default.device[1] if sd.default.device else None
         if default_idx is None:
-            default_idx = devs.default_output_device
+            try:
+                default_idx = sd.query_hostapis(0).get("default_output_device", -1)
+            except Exception:
+                default_idx = None
         if default_idx is None or default_idx < 0:
             default_idx = None
         default_name = devs[default_idx]["name"] if default_idx is not None else ""
