@@ -22,7 +22,14 @@ def check_models():
     if os.path.exists(dl_script):
         print("Checking models...")
         try:
-            subprocess.run([sys.executable, dl_script], check=True, timeout=600)
+            subprocess.run([sys.executable, dl_script], check=True, timeout=1800)
+        except subprocess.TimeoutExpired:
+            # The Whisper model alone is ~487 MB: on a slow connection the
+            # in-app download can exceed any reasonable window. Tell the
+            # user to run the script manually (no cap there) instead of
+            # silently starting with a broken speech-to-text.
+            print("WARNING: Model download timed out (slow or interrupted connection).")
+            print("Run 'python scripts/download_models.py' in a terminal, wait for it to finish, then restart.")
         except Exception as e:
             # A failed download (no network, blocked site) must not crash the
             # app or block startup: warn and let the user place the models

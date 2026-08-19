@@ -70,14 +70,18 @@ def load_config() -> Config:
                 # just a stray number) must not crash the app: ignore it.
                 if isinstance(loaded, dict):
                     for k, v in loaded.items():
-                        if hasattr(c, k):
-                            default_val = getattr(c, k)
-                            expected_type = type(default_val)
-                            try:
-                                cast_val = expected_type(v)
-                                setattr(c, k, cast_val)
-                            except (ValueError, TypeError):
-                                print(f"Warning: Could not cast config '{k}' value '{v}' to {expected_type.__name__}. Using default.")
+                        if not hasattr(c, k):
+                            # A typo like "tts_voicee" must not silently do
+                            # nothing: tell the user which key is bogus.
+                            print(f"Warning: unknown config key '{k}' ignored. See README for valid keys.")
+                            continue
+                        default_val = getattr(c, k)
+                        expected_type = type(default_val)
+                        try:
+                            cast_val = expected_type(v)
+                            setattr(c, k, cast_val)
+                        except (ValueError, TypeError):
+                            print(f"Warning: Could not cast config '{k}' value '{v}' to {expected_type.__name__}. Using default.")
     except yaml.YAMLError as e:
         print(f"YAML Error loading config: {e}")
     except OSError as e:

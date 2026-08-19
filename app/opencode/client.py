@@ -194,7 +194,12 @@ class OpenCodeClient:
         cwd = str(Path(cwd).resolve()) if cwd else str(BASE_DIR)
         print("Starting OpenCode ACP server...")
         import shutil
-        opencode_exe = shutil.which("opencode") or "opencode"
+        opencode_exe = shutil.which("opencode")
+        if opencode_exe is None:
+            raise RuntimeError(
+                "opencode not found on PATH. Install it with 'npm install -g opencode-ai', "
+                "then close and reopen the terminal before starting Varonika."
+            )
         try:
             self._cm = spawn_agent_process(
                 self.varonika_client, opencode_exe, "acp", "--cwd", cwd,

@@ -6,7 +6,7 @@ This guide takes you from a fresh computer to talking to Varonika. There are thr
 2. Install and configure OpenCode (her brain)
 3. Install and run Varonika
 
-At the end you say "Hey Varonika" (or "Hey Jarvis" with the starter model) and she answers you out loud.
+At the end you say "Hey Varonika" and she answers you out loud.
 
 ---
 
@@ -99,7 +99,7 @@ cd Varonika
 pip install -e .
 ```
 
-This installs everything Varonika needs: the window interface, speech recognition, wake word, text to speech, and the OpenCode connection. It can take a few minutes; let it finish.
+This installs everything Varonika needs: the window interface, speech recognition, wake word, text to speech, and the OpenCode connection. It can take a few minutes; the AI libraries (especially torch) are big, so let it finish.
 
 > If `pip` is not found, check Step 1's PATH note, or try `python -m pip install -e .`.
 
@@ -116,11 +116,11 @@ Download them with:
 python scripts/download_models.py
 ```
 
-Or simply start Varonika: she downloads them automatically on the first run.
+Or simply start Varonika: she downloads them automatically on the first run. (All together the models need about 1 GB of disk space.)
 
 > If the Whisper download fails, grab it directly from [this link](https://github.com/Mohammad-Faiz-Cloud-Engineer/Varonika/releases/download/ggml-small.en/ggml-small.en.bin) and place it in the `models/` folder as `ggml-small.en.bin`.
 
-**About the wake word:** the starter model responds to **"Hey Jarvis"**. If you have your own trained "Hey Varonika" model, drop it in the project root as `Hey_Varonika.onnx` and the script copies it into place. (The first run also downloads the Kokoro voice model, so be patient, she warms up.)
+**About the wake word:** the model included with the code responds to **"Hey Varonika"**. If you have your own trained model, drop it in the project root as `Hey_Varonika.onnx` and the script copies it into place. (The first run also downloads the Kokoro voice model, about 330 MB from Hugging Face, so she needs internet and patience on first launch.)
 
 ### 3.4 Start Varonika
 
@@ -135,7 +135,7 @@ You should see:
 
 ### 3.5 Talk to her
 
-1. Say **"Hey Jarvis"** (or "Hey Varonika" with a custom model). She answers "Yes Boss" to confirm she is listening.
+1. Say **"Hey Varonika"**. She answers "Yes Boss" to confirm she is listening.
 2. Speak your request, for example "What is the formula for torque?"
 3. She sends it to OpenCode, then speaks the answer back and shows it in the window.
 
@@ -150,7 +150,7 @@ No wake word handy? Press **Alt+Space** to activate listening without speaking.
 Everything has sensible defaults, but you can create a `config.yaml` in the project root to override them:
 
 ```yaml
-wake_word_threshold: 0.6           # higher = harder to trigger
+wake_word_threshold: 0.6           # higher = harder to trigger; lower to 0.5 if she does not trigger
 stt_model: "models/ggml-small.en.bin"
 stt_language: "en"
 silence_timeout_ms: 2500           # pause before she stops listening
@@ -170,7 +170,12 @@ mic_device: ""                     # e.g. "Headset Microphone"; empty = Windows 
 | --- | --- |
 | `python` or `pip` not found | Python was not added to PATH. Reinstall Python and tick "Add Python to PATH". |
 | `opencode` not found | Reinstall OpenCode (Step 2.2), then close and reopen the terminal. |
-| Nothing happens when you say the wake word | Check the console says the wake word model loaded. Use the starter model? Say "Hey Jarvis". Check the mic dropdown in the window points at the mic you speak into ("System Default" lets Windows decide). |
+| Nothing happens when you say the wake word | Say "Hey Varonika" (that is what the included model hears). Check the console says the wake word model loaded, and the mic dropdown in the window points at the mic you speak into ("System Default" lets Windows decide). Still silent? Lower `wake_word_threshold` to 0.5 in `config.yaml`. Wake word models are trained on one voice, so if she never responds to yours even at 0.5, use **Alt+Space** instead, or train your own model and drop it in as `Hey_Varonika.onnx`. |
+| She never hears you at all (wake word and voice both dead) | Windows may be blocking microphone access for desktop apps. Go to Settings -> Privacy & security -> Microphone, allow desktop apps to access the mic, then restart Varonika. |
+| The window says "OpenCode unavailable" | `opencode` is not on the PATH of the terminal that started Varonika. Install it (Step 2.2), close and reopen the terminal, then start Varonika again. |
+| She connects but answers nothing | OpenCode has no AI model configured. Run `opencode`, type `/connect`, add a provider (or Ollama, see the guides), then restart Varonika. |
+| First-run model download fails or times out | Run `python scripts/download_models.py` manually and let it finish. A slow connection takes a while: the Whisper model alone is about 487 MB. |
+| Windows SmartScreen or antivirus blocks something | Python apps that record audio and use global hotkeys sometimes trip Windows Defender. Allow the app and Python through, then try again. |
 | She hears herself and answers | She should refuse to transcribe while speaking, including the echo right after. If you still hear looping, lower the speaker volume or `tts_volume`. |
 | Speech to text or wake word failed to load | Check `models/` contains `ggml-small.en.bin` and `wakeword.onnx`, then restart. |
 | OpenCode is not answering | OpenCode itself must work first: run `opencode` in a terminal and ask it a question (Step 2.4). |

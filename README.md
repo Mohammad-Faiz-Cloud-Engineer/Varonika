@@ -77,7 +77,7 @@ Then start the tool with:
 python app/main.py
 ```
 
-If you have your own trained wake word model, drop it at the project root as `Hey_Varonika.onnx` and the script will copy it into place. Without a custom model, the script downloads a placeholder that responds to "Hey Jarvis" instead.
+If you have your own trained wake word model, drop it at the project root as `Hey_Varonika.onnx` and the script will copy it into place. The wake word model included in this repo responds to "Hey Varonika", but wake word models are trained on one voice, so it may not hear yours; if she never responds, press **Alt+Space** instead. (A "Hey Jarvis" placeholder is fetched only if the model file is missing.)
 
 To choose which LLM she uses (including your own custom model), see [LLM_SETUP.md](Setup%20Docs/LLM_SETUP.md).
 
@@ -123,7 +123,7 @@ After she answers she keeps listening for a short follow-up question. If you sta
 All settings have sensible defaults, but you can create a `config.yaml` in the project root to override them:
 
 ```yaml
-wake_word_threshold: 0.6           # higher = harder to trigger
+wake_word_threshold: 0.6           # higher = harder to trigger; lower to 0.5 if she does not trigger
 stt_model: "models/ggml-small.en.bin"
 stt_language: "en"
 silence_timeout_ms: 2500           # pause before she stops listening
@@ -152,11 +152,19 @@ mic_device: ""                     # e.g. "Headset Microphone"; empty = Windows 
 
 **OpenCode stops responding after a big answer.** This was a bug in the data line limit. The connection now allows very large messages, so long tool results no longer kill the link.
 
-**Nothing happens when you say the wake word.** Check that the console shows the wake word model loaded, and that the window's mic dropdown points at the mic you are actually speaking into (use "System Default" to let Windows decide). If you are using the placeholder model, you must say "Hey Jarvis".
+**Nothing happens when you say the wake word.** Say "Hey Varonika" (that is what the included model hears). Check that the console shows the wake word model loaded, and that the window's mic dropdown points at the mic you are actually speaking into (use "System Default" to let Windows decide). Still silent? Lower `wake_word_threshold` to 0.5 in `config.yaml`, and check Windows microphone privacy below.
+
+**She never hears you at all (wake word and voice both dead).** Windows may be blocking microphone access for desktop apps. Check Settings -> Privacy & security -> Microphone, allow desktop apps to access the mic, then restart Varonika.
+
+**The window says "OpenCode unavailable".** The `opencode` command was not found on the PATH of the terminal that started Varonika. Install it (`npm install -g opencode-ai`), close and reopen the terminal, then start Varonika again.
+
+**She connects but answers nothing.** OpenCode has no AI model configured. Run `opencode`, type `/connect`, add a provider (or Ollama, see the guides), then restart Varonika.
+
+**Model download fails or times out on first start.** Run `python scripts/download_models.py` manually and let it finish, then start Varonika. A slow connection takes a while: the Whisper model alone is about 487 MB.
 
 ## Notes
 
-The first run downloads the Kokoro voice model and may take a little while. Be patient, she warms up.
+The first run downloads the Kokoro voice model (~330 MB) from Hugging Face, so she needs internet and patience on first launch. All together the models and libraries need about 1 GB of disk space.
 
 ## License
 

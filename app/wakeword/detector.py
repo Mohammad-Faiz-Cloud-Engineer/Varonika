@@ -1,5 +1,6 @@
 import os
 import shutil
+import time
 import urllib.request
 
 import numpy as np
@@ -10,6 +11,8 @@ WAKEWORD_RESOURCE_URLS = {
     "melspectrogram.onnx": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx",
     "embedding_model.onnx": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.onnx",
 }
+
+_MAX_ATTEMPTS = 3
 
 def _resource_path(name):
     return os.path.join(
@@ -30,22 +33,26 @@ def _ensure_resource(name):
     if _valid_file(target):
         return target
     part = target + ".part"
-    try:
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        with urllib.request.urlopen(WAKEWORD_RESOURCE_URLS[name], timeout=30) as resp, open(part, "wb") as out:
-            shutil.copyfileobj(resp, out)
-        if _valid_file(part):
-            os.replace(part, target)
-            print(f"Downloaded missing {name} for wake word.")
-            return target
-    except Exception as e:
-        print(f"Error downloading {name}: {e}")
-    finally:
-        if os.path.exists(part):
-            try:
-                os.remove(part)
-            except OSError:
-                pass
+    for attempt in range(1, _MAX_ATTEMPTS + 1):
+        try:
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with urllib.request.urlopen(WAKEWORD_RESOURCE_URLS[name], timeout=30) as resp, open(part, "wb") as out:
+                shutil.copyfileobj(resp, out)
+            if _valid_file(part):
+                os.replace(part, target)
+                print(f"Downloaded missing {name} for wake word.")
+                return target
+            print(f"Downloaded {name} was empty (attempt {attempt}), retrying...")
+        except Exception as e:
+            print(f"Error downloading {name} (attempt {attempt}/{_MAX_ATTEMPTS}): {e}")
+        finally:
+            if os.path.exists(part):
+                try:
+                    os.remove(part)
+                except OSError:
+                    pass
+        if attempt < _MAX_ATTEMPTS:
+            time.sleep(2)
     return None
 
 def ensure_wakeword_resources():

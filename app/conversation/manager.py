@@ -116,7 +116,14 @@ class ConversationManager:
             await self.opencode.start()
             self._opencode_started = True
             model = await self.opencode.get_current_model()
-            self._emit_ui("System", f"OpenCode connected.\nSession: {self.opencode.session_id}\nModel: {model}")
+            if model in ("unknown", "default", "", None):
+                self._emit_ui(
+                    "System",
+                    "OpenCode connected, but no model is configured.\n"
+                    "Run 'opencode' in a terminal and use /connect to add a model.",
+                )
+            else:
+                self._emit_ui("System", f"OpenCode connected.\nSession: {self.opencode.session_id}\nModel: {model}")
         except Exception as e:
             print(f"Failed to start OpenCode: {e}")
             self._emit_ui("System", f"OpenCode unavailable: {e}")
