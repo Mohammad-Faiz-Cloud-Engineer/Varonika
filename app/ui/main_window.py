@@ -235,10 +235,16 @@ class MainWindow(QMainWindow):
             self.sync_mic_combo()
             self._update_mic_in_use()
         # The live stream died (e.g. Bluetooth link dropped): fall back to
-        # the system default so capture recovers. Do not treat "probe could
-        # not open a second handle on the busy live mic" as a dropout; that
-        # would tear down a working stream every ~10 s.
-        if self.manager.audio.device_name and not self.manager.audio.stream_is_healthy():
+        # the system default so capture recovers. This also covers users on
+        # "System Default": the stream object exists but is inactive, and
+        # without this branch a dead default mic would never be reopened
+        # (set_device's early return skips a same-name restart, and the
+        # "Unavailable" marker only appears when opening fails outright).
+        # Do not treat "probe could not open a second handle on the busy
+        # live mic" as a dropout; that would tear down a working stream
+        # every ~10 s.
+        if (self.manager.audio.stream is not None
+                and not self.manager.audio.stream_is_healthy()):
             self.manager.set_mic_device("", persist=False)
             self.sync_mic_combo()
             self._update_mic_in_use()

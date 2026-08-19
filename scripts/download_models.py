@@ -44,6 +44,15 @@ def download_file(url, destination):
         print(f"\nFailed to download {url}: {e}")
         raise RuntimeError(f"Could not download model from {url}") from e
 
+def _usable(path: Path) -> bool:
+    """True when the file exists and is not empty. A zero-byte file left
+    behind by a killed download must be re-downloaded, not treated as a
+    valid model (it would load and then fail at runtime)."""
+    try:
+        return path.exists() and path.stat().st_size > 0
+    except OSError:
+        return False
+
 def main():
     base_dir = Path(__file__).parent.parent
     models_dir = base_dir / "models"
@@ -51,7 +60,7 @@ def main():
     
     # Download Whisper Model
     whisper_model = models_dir / "ggml-small.en.bin"
-    if not whisper_model.exists():
+    if not _usable(whisper_model):
         whisper_url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin"
         download_file(whisper_url, whisper_model)
     else:
@@ -71,7 +80,7 @@ def main():
     if use_custom:
         shutil.copy(custom_model, wakeword_model)
         print("Copied custom 'Hey Varonika' wake word model.")
-    elif not wakeword_model.exists():
+    elif not _usable(wakeword_model):
         # URL for a pre-trained openwakeword model just to ensure we have a valid ONNX file
         wakeword_url = "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/hey_jarvis_v0.1.onnx"
         download_file(wakeword_url, wakeword_model)

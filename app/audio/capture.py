@@ -304,7 +304,11 @@ class AudioCapture:
     def set_device(self, name: str):
         """Switch the microphone live (e.g. the headset used for TeamSpeak)."""
         name = name or ""
-        if name == self.device_name and self.stream is not None:
+        # Only keep the current stream when it is actually alive. A dead
+        # stream (Bluetooth link dropped, device removed) must be reopened
+        # even when the requested device did not change: the early return
+        # below would otherwise keep capture dead until an app restart.
+        if name == self.device_name and self.stream is not None and self.stream_is_healthy():
             print(f"Microphone in use: {self.active_device}")
             return
         self.device_name = name

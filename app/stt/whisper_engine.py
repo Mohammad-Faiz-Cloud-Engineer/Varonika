@@ -1,5 +1,6 @@
 import numpy as np
 from pywhispercpp.model import Model
+import os
 import re
 import time
 import threading
@@ -12,11 +13,32 @@ class STTEngine:
     def __init__(self, model_path: str, energy_threshold: float = 0.015, silence_timeout: float = 2.5, language: str = "en", sample_rate: int = 16000):
         # pywhispercpp supports ggml formats
         print(f"Loading Whisper model from {model_path}...")
-        try:
-            self.model = Model(model_path, n_threads=4, print_realtime=False, print_progress=False, language=language)
-        except Exception as e:
-            print(f"Error loading Whisper model: {e}")
+        # pywhispercpp hands a missing path straight to whisper.cpp, which
+        # returns a NULL model and crashes the whole process (a C-level
+        # access violation the except below cannot catch). The same applies
+        # to corrupt or wrong files (half-written download, another model
+        # copied over): construction "succeeds" but the first transcribe()
+        # call segfaults. Guard both with a file header check so any bad
+        # model degrades to the graceful "failed to load" message instead
+        # of killing the app at startup or on the first spoken command.
+        if not os.path.isfile(model_path):
+            print(f"Error loading Whisper model: {model_path} is missing")
             self.model = None
+        else:
+            try:
+                if os.path.getsize(model_path) == 0:
+                    raise ValueError(f"model file {model_path} is empty")
+                # Valid whisper.cpp models start with the ggml magic
+                # ("lmgg" = GGML_MAGIC 0x67676d6c in little-endian bytes)
+                # or the GGUF magic.
+                with open(model_path, "rb") as fh:
+                    magic = fh.read(4)
+                if magic not in (b"lmgg", b"GGUF"):
+                    raise ValueError(f"{model_path} is not a valid whisper model (bad file header)")
+                self.model = Model(model_path, n_threads=4, print_realtime=False, print_progress=False, language=language)
+            except Exception as e:
+                print(f"Error loading Whisper model: {e}")
+                self.model = None
         self.energy_threshold = energy_threshold
         self.silence_timeout = silence_timeout
         self.sample_rate = sample_rate
@@ -44,7 +66,9 @@ class STTEngine:
         print(f"Calibrating noise floor for {duration_sec}s...")
         self.is_calibrating = True
         self.calibration_buffer = []
-        self.calibration_chunks_needed = int((sample_rate * duration_sec) / chunk_size)
+        # Count chunks from the engine's own sample rate: the hardcoded
+        # default would miscount for a non-16 kHz engine.
+        self.calibration_chunks_needed = int((self.sample_rate * duration_sec) / chunk_size)
 
     def process_chunk(self, audio_chunk: np.ndarray) -> bool:
         """
