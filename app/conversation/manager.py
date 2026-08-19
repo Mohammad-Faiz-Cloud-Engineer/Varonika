@@ -115,6 +115,7 @@ class ConversationManager:
         # transcription: words recorded on the previous device must never be
         # recognized as the user's command after the switch.
         self.stt.reset()
+        self.wakeword.reset()
         if persist:
             self.config.mic_device = name
             save_config_field("mic_device", name)

@@ -132,9 +132,9 @@ To switch between models later, run `opencode models` to list what is configured
 
 1. Close Varonika if it is running
 2. Run `python app/main.py` again
-3. Say "Hey Varonika", then: **"Which LLM model are you using?"**
+3. Check the **System** message in the window: it shows the session and the model in use
 
-She should answer with the local model name. From then on, all her answers come from your local LM Studio model.
+It should show your local model. From then on, all her answers come from your local LM Studio model.
 
 ## Troubleshooting
 

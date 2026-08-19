@@ -130,13 +130,17 @@ class OpenCodeClient:
             return self._model
         import json, shutil
         opencode_exe = shutil.which("opencode") or "opencode"
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 opencode_exe, "debug", "config",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            stdout, _ = await proc.communicate()
+            # A wedged opencode CLI must not stall startup (or the model line
+            # after a session reset) forever: give it 10 seconds, then kill
+            # it and report the model as unknown.
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
             if proc.returncode == 0:
                 config = json.loads(stdout.decode('utf-8'))
                 self._model = config.get("model", "default")
@@ -145,6 +149,16 @@ class OpenCodeClient:
         except Exception as e:
             print(f"Warning: Failed to get current model: {e}")
             return "unknown"
+        finally:
+            if proc is not None and proc.returncode is None:
+                try:
+                    proc.kill()
+                    # Process the exit event (and pipe cleanup) while the
+                    # loop is alive, instead of leaving it to transport
+                    # finalizers that can run after the loop is closed.
+                    await proc.wait()
+                except Exception:
+                    pass
 
     async def start(self, cwd: str | None = None):
         """Starts the OpenCode ACP process and connects to it via stdio.

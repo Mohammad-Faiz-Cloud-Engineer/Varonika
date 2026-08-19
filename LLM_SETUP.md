@@ -12,11 +12,7 @@ Changing the model is a config change in OpenCode, not a code change. Varonika p
 
 ## What model is she using right now?
 
-Ask her:
-
-> "Which LLM model are you using?"
-
-or check the list of models OpenCode can see:
+She does not name her own model out loud (that is part of her identity), but the model is easy to check: look at the **System** message in the window when Varonika starts, it shows the session and the model in use. You can also check the list of models OpenCode can see:
 
 ```bash
 opencode models
@@ -115,11 +111,7 @@ export MYPROVIDER_API_KEY=your-api-key     # Linux / macOS
 
 ## Step 2: verify
 
-Restart Varonika (close the window and run `python app/main.py` again), then ask:
-
-> "Which LLM model are you using?"
-
-She should answer with the model you configured. You can also confirm the model loads by running:
+Restart Varonika (close the window and run `python app/main.py` again). The **System** message in the window shows which model is in use. You can also confirm the model loads by running:
 
 ```bash
 opencode run "reply with exactly: OK"
@@ -133,4 +125,4 @@ The first line of output shows the model in use.
 
 **The model ID in the list has a different format than mine.** Model IDs look like `provider/model-name`. Copy the ID exactly as `opencode models` prints it.
 
-**She says the model name but answers oddly.** Some models are better at following tool-use instructions than others. If a model refuses to use tools, pick a different one, it is a one-line config change.
+**The startup System message shows the model, but answers are odd.** Some models are better at following tool-use instructions than others. If a model refuses to use tools, pick a different one, it is a one-line config change.

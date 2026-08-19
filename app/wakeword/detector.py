@@ -28,3 +28,9 @@ class WakeWordDetector:
             self.model.reset()
             return True
         return False
+
+    def reset(self):
+        """Clear the model's internal prediction/feature buffers, e.g. after
+        a microphone switch so frames from the old device cannot trigger."""
+        if self.model:
+            self.model.reset()

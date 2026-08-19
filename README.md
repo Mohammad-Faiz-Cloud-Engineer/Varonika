@@ -114,7 +114,7 @@ wake_word_threshold: 0.6           # higher = harder to trigger
 stt_model: "models/ggml-small.en.bin"
 stt_language: "en"
 silence_timeout_ms: 2500           # pause before she stops listening
-energy_threshold: 0.015            # mic sensitivity
+energy_threshold: 0.015            # mic sensitivity; auto-calibrated at startup, this value only applies until calibration completes
 tts_voice: "af_bella"              # Kokoro voice
 tts_speed: 0.9                     # below 1.0 speaks slower and more clearly
 tts_volume: 1.0                    # TTS loudness boost, 0.5x to 5.0x (slider in the window too)
