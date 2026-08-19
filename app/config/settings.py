@@ -64,7 +64,7 @@ def load_config() -> Config:
     c = Config()
     try:
         if config_path.exists():
-            with open(config_path, "r") as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 loaded = yaml.safe_load(f)
                 # A hand-edited config containing a scalar or a list (e.g.
                 # just a stray number) must not crash the app: ignore it.
@@ -82,6 +82,11 @@ def load_config() -> Config:
         print(f"YAML Error loading config: {e}")
     except OSError as e:
         print(f"OS Error loading config: {e}")
+    except UnicodeDecodeError as e:
+        # A hand-edited config saved in a legacy ANSI encoding (cp1252 etc.)
+        # is not valid UTF-8: fall back to defaults with a warning, never
+        # crash startup.
+        print(f"Config encoding error loading config: {e}")
     c.wake_word_model = _resolve_model_path(c.wake_word_model)
     c.stt_model = _resolve_model_path(c.stt_model)
     return c
