@@ -85,6 +85,7 @@ To choose which LLM she uses (including your own custom model), see [LLM_SETUP.m
 
 All setup guides live in the [Setup Docs](Setup%20Docs/) folder:
 
+- [SETUP.md](Setup%20Docs/SETUP.md): the full from-zero setup guide (Python, OpenCode, Varonika)
 - [LLM_SETUP.md](Setup%20Docs/LLM_SETUP.md): choose which LLM she uses, cloud or custom
 - [OLLAMA_SETUP.md](Setup%20Docs/OLLAMA_SETUP.md): run a free local LLM with Ollama
 - [LMStudio.md](Setup%20Docs/LMStudio.md): run a local LLM with LM Studio
