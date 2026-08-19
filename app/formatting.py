@@ -139,9 +139,16 @@ def _convert_math(s):
                 continue
             j = i + 1
             if j < n:
-                out.append(" " if s[j] in ",;! " else s[j])
+                if s[j] == "\\":
+                    out.append("; ")
+                else:
+                    out.append(" " if s[j] in ",;! " else s[j])
                 j += 1
             i = j
+        elif c == "$":
+            # A stray '$' inside math content (e.g. a degenerate nested
+            # span) is never valid LaTeX: drop it rather than render it.
+            i += 1
         elif c == "^":
             j = i + 1
             if j < n and s[j] == "{":
@@ -192,16 +199,52 @@ def _convert_math(s):
     return "".join(out)
 
 
+def _looks_like_math(s):
+    """True if a $-delimited span really is math, not currency or prose.
+
+    Real math almost always carries a LaTeX command, a superscript or
+    subscript marker, or a Greek letter. Currency and plain numbers carry
+    none of these, so their '$' delimiters can be dropped instead of being
+    converted as if they were math.
+    """
+    if "\\" in s or "^" in s or "_" in s:
+        return True
+    return any("\u03b1" <= ch <= "\u03c9" or "\u0391" <= ch <= "\u03a9" for ch in s)
+
+
+def _find_next_dollar(text, start):
+    """Index of the next inline '$', or -1 if it would cross a fence or a
+    '$$' block boundary (a pair must never straddle those)."""
+    j = start
+    n = len(text)
+    while j < n:
+        if text[j] == "$":
+            if j + 1 < n and text[j + 1] == "$":
+                return -1
+            return j
+        if text[j] == "\n":
+            k = j + 1
+            while k < n and text[k] in " \t":
+                k += 1
+            if text.startswith("```", k):
+                return -1
+        j += 1
+    return -1
+
+
 def latex_to_text(text: str) -> str:
     """Rewrite LaTeX math in a markdown string into readable plain text.
 
     Fenced code blocks are left untouched, so `$` inside code stays as-is.
     Handles $$...$$ block math, \\(...\\) / \\[...\\] and $...$ inline math.
+    A single fence-aware scanner pairs the '$' delimiters by looking at
+    the content between them, so currency ("$100"), lone dollars and math
+    that spans lines all resolve without ever leaving a raw '$' behind.
     """
+    # Pass 1: \(...\) and \[...\] math, fence-aware per line
     lines = text.split("\n")
     out = []
     in_fence = False
-    math_block = False
     for line in lines:
         stripped = line.lstrip()
         if stripped.startswith("```"):
@@ -211,27 +254,94 @@ def latex_to_text(text: str) -> str:
         if in_fence:
             out.append(line)
             continue
-        if "$$" in line:
-            parts = line.split("$$")
-            built = []
-            for idx, part in enumerate(parts):
-                if math_block:
-                    built.append(_convert_math(part))
-                else:
-                    built.append(part)
-                if idx < len(parts) - 1:
-                    math_block = not math_block
-            out.append("".join(built))
-            continue
-        if math_block:
-            out.append(_convert_math(line))
-            continue
-        # \\( ... \\) and \\[ ... \\] math, then $...$ inline math
         line = re.sub(r"\\\[\s*(.*?)\s*\\\]",
                       lambda m: _convert_math(m.group(1)), line, flags=re.S)
         line = re.sub(r"\\\(\s*(.*?)\s*\\\)",
                       lambda m: _convert_math(m.group(1)), line, flags=re.S)
-        line = re.sub(r"\$(?!\$)([^$]+?)\$(?!\$)",
-                      lambda m: _convert_math(m.group(1)), line)
         out.append(line)
-    return "\n".join(out)
+    text = "\n".join(out)
+
+    # Pass 2: whole-text scan for $$ blocks and $ spans
+    out = []
+    buf = []
+    math_buf = None      # None when not inside a $$ block
+    span = None          # None when no inline span is open
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        # Fence lines are consumed whole, never scanned
+        if i == 0 or text[i - 1] == "\n":
+            k = i
+            while k < n and text[k] in " \t":
+                k += 1
+            if text.startswith("```", k):
+                if span is not None:
+                    buf.append(_convert_math("".join(span))
+                               if _looks_like_math("".join(span))
+                               else "".join(span))
+                    span = None
+                j = text.find("\n", i)
+                if j == -1:
+                    j = n
+                buf.append(text[i:j])
+                in_fence = not in_fence
+                i = j
+                continue
+        if in_fence:
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == "$" and i + 1 < n and text[i + 1] == "$":
+            if span is not None:
+                buf.append(_convert_math("".join(span))
+                           if _looks_like_math("".join(span))
+                           else "".join(span))
+                span = None
+            if math_buf is None:
+                out.append("".join(buf))
+                buf = []
+                math_buf = []
+            else:
+                out.append(_convert_math("".join(math_buf)))
+                math_buf = None
+            i += 2
+            continue
+        if math_buf is not None:
+            math_buf.append(ch)
+            i += 1
+            continue
+        if ch == "$":
+            close = _find_next_dollar(text, i + 1)
+            if close != -1:
+                content = text[i + 1:close]
+                if _looks_like_math(content):
+                    out.append("".join(buf))
+                    buf = []
+                    out.append(_convert_math(content))
+                    i = close + 1
+                    continue
+                # Not math (e.g. currency "$100 and"): drop this opener and
+                # re-examine the closing '$' — it may be the opener of a
+                # real math span ("... and $\tau = 0.5$").
+                buf.append(content)
+                i = close
+                continue
+            # No closing '$' ahead: hold the span open across lines so a
+            # later '$' (or end of text) decides what it really is.
+            span = []
+            i += 1
+            continue
+        if span is not None:
+            span.append(ch)
+        else:
+            buf.append(ch)
+        i += 1
+    if span is not None:
+        buf.append(_convert_math("".join(span))
+                   if _looks_like_math("".join(span))
+                   else "".join(span))
+    if math_buf is not None:
+        out.append(_convert_math("".join(math_buf)))
+    out.append("".join(buf))
+    return "".join(out)

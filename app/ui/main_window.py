@@ -150,6 +150,14 @@ class MainWindow(QMainWindow):
         # Track streaming state (cursor range of the streamed text)
         self._stream_start = None
         self._stream_end = None
+        # The answer as streamed so far: every chunk re-renders this whole
+        # buffer as markdown, so bold, bullets, code and math all appear
+        # formatted live instead of showing raw markers until the end.
+        self._stream_text = ""
+        # Math expressions often split across chunks ("$\tau" then " = 1$").
+        # The tail from the last unclosed '$' is held back until the next
+        # chunk can complete it, so raw '$' never flashes mid-stream.
+        self._stream_pending = ""
 
         self._populate_mic_devices()
         self.mic_combo.currentTextChanged.connect(self._on_mic_changed)
@@ -344,9 +352,28 @@ class MainWindow(QMainWindow):
                 cursor.movePosition(QTextCursor.MoveOperation.End)
                 self._stream_start = cursor.position()
                 self._stream_end = self._stream_start
+            # Hold back the tail after the last unclosed '$' (parity-aware,
+            # so several math spans in one chunk still cut at the right
+            # place). Everything else re-renders as markdown right away.
+            pending = self._stream_pending + message
+            cut = -1
+            count = 0
+            for idx, ch in enumerate(pending):
+                if ch == '$':
+                    count += 1
+                    if count % 2 == 1:
+                        cut = idx
+            if count % 2 == 1:
+                self._stream_text += pending[:cut]
+                self._stream_pending = pending[cut:]
+            else:
+                self._stream_text += pending
+                self._stream_pending = ""
             cursor = self.chat_view.textCursor()
-            cursor.setPosition(self._stream_end)
-            cursor.insertText(message)
+            cursor.setPosition(self._stream_start)
+            cursor.setPosition(self._stream_end, QTextCursor.MoveMode.KeepAnchor)
+            cursor.removeSelectedText()
+            cursor.insertFragment(self._markdown_fragment(self._stream_text))
             self._stream_end = cursor.position()
             self.chat_view.setTextCursor(cursor)
         elif source == "Varonika_stream_reset":
@@ -354,6 +381,8 @@ class MainWindow(QMainWindow):
             # answer starts a fresh block at the document end.
             self._stream_start = None
             self._stream_end = None
+            self._stream_text = ""
+            self._stream_pending = ""
         elif source == "Varonika":
             # Final full response: replace the streamed text with rendered Markdown,
             # or append the text if nothing was streamed
@@ -366,6 +395,8 @@ class MainWindow(QMainWindow):
                     cursor.insertFragment(self._markdown_fragment(message))
                 self._stream_start = None
                 self._stream_end = None
+                self._stream_text = ""
+                self._stream_pending = ""
             elif message:
                 self._append_chat_block(
                     '<span style="color:#4ec9b0; font-weight:bold;">Varonika:</span> '
@@ -376,6 +407,8 @@ class MainWindow(QMainWindow):
         elif source == "User":
             self._stream_start = None
             self._stream_end = None
+            self._stream_text = ""
+            self._stream_pending = ""
             self._append_chat_block(
                 f'<span style="color:#569cd6; font-weight:bold;">You:</span> {html.escape(message)}'
             )
