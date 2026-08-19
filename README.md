@@ -44,7 +44,7 @@ yarn global add opencode-ai
 pnpm install -g opencode-ai
 ```
 
-Once installed, configure which LLM OpenCode should use (a cloud provider, or a local model via LM Studio, see [LMStudio.md](Setup%20Docs/LMStudio.md)).
+Once installed, configure which LLM OpenCode should use: a cloud provider, or a local model via [Ollama](Setup%20Docs/OLLAMA_SETUP.md) or [LM Studio](Setup%20Docs/LMStudio.md).
 
 > **Note for Linux Users:** On Linux (Ubuntu), Python 3.12 is currently not supported. This is because the `openwakeword` dependency requires `tflite-runtime` on Linux, which does not have pre-built wheels for Python 3.12. Please use Python 3.11 on Linux.
 
@@ -80,6 +80,15 @@ python app/main.py
 If you have your own trained wake word model, drop it at the project root as `Hey_Varonika.onnx` and the script will copy it into place. Without a custom model, the script downloads a placeholder that responds to "Hey Jarvis" instead.
 
 To choose which LLM she uses (including your own custom model), see [LLM_SETUP.md](Setup%20Docs/LLM_SETUP.md).
+
+## Setup guides
+
+All setup guides live in the [Setup Docs](Setup%20Docs/) folder:
+
+- [LLM_SETUP.md](Setup%20Docs/LLM_SETUP.md): choose which LLM she uses, cloud or custom
+- [OLLAMA_SETUP.md](Setup%20Docs/OLLAMA_SETUP.md): run a free local LLM with Ollama
+- [LMStudio.md](Setup%20Docs/LMStudio.md): run a local LLM with LM Studio
+- [PLAYWRIGHT_SETUP.md](Setup%20Docs/PLAYWRIGHT_SETUP.md): give her browser control with Playwright
 
 ## Running
 
