@@ -89,6 +89,7 @@ All setup guides live in the [Setup Docs](Setup%20Docs/) folder:
 - [OLLAMA_SETUP.md](Setup%20Docs/OLLAMA_SETUP.md): run a free local LLM with Ollama
 - [LMStudio.md](Setup%20Docs/LMStudio.md): run a local LLM with LM Studio
 - [PLAYWRIGHT_SETUP.md](Setup%20Docs/PLAYWRIGHT_SETUP.md): give her browser control with Playwright
+- [CHROME_DEVTOOLS_SETUP.md](Setup%20Docs/CHROME_DEVTOOLS_SETUP.md): test websites in a real Chrome with Chrome DevTools MCP
 
 ## Running
 
