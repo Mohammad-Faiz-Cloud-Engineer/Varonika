@@ -257,6 +257,13 @@ class ConversationManager:
                 self._stream_buffer = safe_text + unsafe_text
 
     def _on_tool_start(self, title: str, tool_call_id: str):
+        # After an interrupt the cancelled prompt keeps running (ACP often
+        # ignores cancel). Its tool events still carry the old stream_seq,
+        # which still equals _request_seq until a newer prompt starts.
+        # Without this guard they yank LISTENING into EXECUTING_TOOL and
+        # STT silently stops until the stale prompt finally unwinds.
+        if not self._answer_in_flight:
+            return
         # A stale request's tool events must not drive the state machine or
         # the UI after a newer request took over (same rule as _on_stream_text).
         if self.opencode._stream_seq != self._request_seq:

@@ -215,12 +215,11 @@ class MainWindow(QMainWindow):
             # back to the system default: keep the combo showing the truth.
             self.sync_mic_combo()
             self._update_mic_in_use()
-        # The mic in use vanished (e.g. Bluetooth link dropped): fall back to
-        # the system default now instead of keeping a doomed stream, so the
-        # combo, the label, and the capture stream all agree. The fallback
-        # must not overwrite the user's saved mic choice in config.yaml.
-        if (self.manager.audio.device_name and self.manager.audio.active_device
-                not in new):
+        # The live stream died (e.g. Bluetooth link dropped): fall back to
+        # the system default so capture recovers. Do not treat "probe could
+        # not open a second handle on the busy live mic" as a dropout; that
+        # would tear down a working stream every ~10 s.
+        if self.manager.audio.device_name and not self.manager.audio.stream_is_healthy():
             self.manager.set_mic_device("", persist=False)
             self.sync_mic_combo()
             self._update_mic_in_use()

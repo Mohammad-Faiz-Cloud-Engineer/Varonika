@@ -281,9 +281,12 @@ class TTSEngine:
 
     def start_worker(self):
         with self._lock:
-            self._stop_event.clear()
+            # Invalidate any still-running producer before the stop event
+            # is cleared. Clearing first left a window where the old
+            # thread could resume and speak a cancelled answer.
             self._generation += 1
             gen = self._generation
+            self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._producer, args=(gen,), daemon=True
         )
@@ -344,8 +347,10 @@ class TTSEngine:
                     # resampling) happens here, off the audio path: the
                     # callback only memcpys finished samples.
                     audio = _compress_silences(np.asarray(audio, dtype=np.float32))
-                    if self._out_rate != SAMPLE_RATE:
-                        audio = resample_poly(audio, self._out_rate, SAMPLE_RATE)
+                    with self._audio_lock:
+                        out_rate = self._out_rate
+                    if out_rate != SAMPLE_RATE:
+                        audio = resample_poly(audio, out_rate, SAMPLE_RATE)
                     with self._lock:
                         vol = self._volume
                     if vol != 1.0:
@@ -487,7 +492,9 @@ class TTSEngine:
         """Interrupts current speech and clears the queue and buffer."""
         with self._lock:
             self._stop_event.set()
-            self._generation += 1  # invalidate the running producer
+            # start_worker() bumps the generation when it restarts the
+            # worker, and that single bump invalidates the running
+            # producer. The stop event covers the gap before the restart.
             self._speaking_owner = None
             self._pending_items = 0
             self._answer_ended = False

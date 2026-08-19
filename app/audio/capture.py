@@ -126,7 +126,29 @@ class AudioCapture:
                 continue
             result.append((i, name, is_modern))
         return [(i, name) for i, name, _ in result
-                if any(self._is_available(c) for c in self._device_candidates(name))]
+                if self._is_live_device(name)
+                or any(self._is_available(c) for c in self._device_candidates(name))]
+
+    def _is_live_device(self, name: str) -> bool:
+        """True when this name is the microphone already open for capture.
+
+        A throwaway probe-open of the live device often fails (device busy)
+        even though the stream is healthy. Treating that as 'unavailable'
+        would drop it from the list and look like a dropout."""
+        if self.stream is None or not name:
+            return False
+        if self.active_device and self._matches(name, self.active_device):
+            return True
+        return bool(self.device_name) and self._matches(name, self.device_name)
+
+    def stream_is_healthy(self) -> bool:
+        """True when the capture stream exists and PortAudio still reports it active."""
+        if self.stream is None:
+            return False
+        try:
+            return bool(self.stream.is_active())
+        except Exception:
+            return False
 
     def _matches(self, wanted: str, candidate_name: str) -> bool:
         """True when candidate_name belongs to the wanted device. Handles

@@ -35,6 +35,11 @@ class HotkeyListener:
         elif current in [AppState.THINKING, AppState.EXECUTING_TOOL]:
             print("Hotkey pressed: Interrupting current task.")
             self.manager.interrupt()
+            # Do not wait for the cancelled ACP prompt to finish: that can
+            # take the whole remaining answer, during which STT is dead.
+            # The stale prompt's finally will not reset STT here because
+            # the state is already LISTENING, not THINKING/EXECUTING_TOOL.
+            self.manager.activate_listening()
 
     def stop(self):
         if self._hotkey is not None:
