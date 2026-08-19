@@ -101,6 +101,56 @@ Example: a persistent profile with Chrome so OpenCode stays logged into a site:
 ]
 ```
 
+## Using your personal browser profile
+
+By default, Playwright MCP starts a **fresh, clean browser profile** every time: no logins, no cookies, no history. It behaves like a stranger's computer. If the agent needs to work with your own logged-in sessions, here are your options, from safest to most advanced:
+
+**Option A: a dedicated profile, log in once (recommended).**
+
+Point the server at a permanent profile folder of its own. The first time it runs, log in to your sites inside that browser window. From then on, the agent opens that profile and is already logged in. Your real browser stays untouched:
+
+```json
+"command": [
+  "npx", "-y", "@playwright/mcp@latest",
+  "--user-data-dir=C:\\playwright-profile"
+]
+```
+
+**Option B: use your real Chrome profile.**
+
+You can point the server straight at the profile your normal Chrome uses, so all your existing logins are already there. On Windows that folder is:
+
+```text
+C:\Users\<you>\AppData\Local\Google\Chrome\User Data\Default
+```
+
+There are two important rules:
+
+1. **Your Chrome must be fully closed** while the agent uses this profile. Chrome locks the profile folder, and a second process opening it fails (or worse, corrupts it). Running the agent on your real profile while you are browsing is a recipe for trouble.
+2. A safer middle ground is to **copy** your profile folder to a separate directory (for example `C:\playwright-profile`) and point the server at the copy. You get your logins, and nothing can ever touch your real browsing data.
+
+Example with your real profile:
+
+```json
+"command": [
+  "npx", "-y", "@playwright/mcp@latest",
+  "--browser=chrome", "--user-data-dir=C:\\Users\\you\\AppData\\Local\\Google\\Chrome\\User Data\\Default"
+]
+```
+
+**Option C: cookies file (`--storage-state`).**
+
+If you only need a few logins and want the cleanest separation, export cookies from your browser into a JSON file and point the server at it:
+
+```json
+"command": [
+  "npx", "-y", "@playwright/mcp@latest",
+  "--storage-state=C:\\playwright-state.json"
+]
+```
+
+Whatever you pick, remember the agent has the same power you have in that browser: it can read your mail, post on your accounts, and make purchases. Only give it the profile it actually needs for its task.
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -110,6 +160,7 @@ Example: a persistent profile with Chrome so OpenCode stays logged into a site:
 | OpenCode says the config is invalid | Check the JSON: `command` must be a list, and `"type": "local"` must be present |
 | OpenCode will not start because of a bad config | Run with `OPENCODE_DISABLE_PROJECT_CONFIG=1` to skip the project config, fix the file, then restart normally |
 | Tool list is missing playwright tools | Check `opencode mcp`. If it is not there, restart OpenCode and check the config path with `opencode config print` |
+| Browser opens with no logins or cookies | That is the default clean profile. See "Using your personal browser profile" above |
 
 ## A note about Varonika
 
