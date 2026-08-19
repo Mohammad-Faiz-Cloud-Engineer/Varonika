@@ -119,9 +119,7 @@ opencode mcp
 You should see `google` listed as connected. Then test it:
 
 > List my Google calendars.
-
 > Show my recent Gmail messages.
-
 > List files in my Google Drive.
 
 If those return real data, everything works.
