@@ -6,6 +6,11 @@ import socket
 import tempfile
 from pathlib import Path
 
+WAKEWORD_RESOURCE_URLS = {
+    "melspectrogram.onnx": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx",
+    "embedding_model.onnx": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.onnx",
+}
+
 def download_file(url, destination):
     print(f"Downloading {url} to {destination}...")
     # A dead or blocked network must fail fast, not hang the app at startup.
@@ -73,6 +78,29 @@ def main():
         print("NOTE: Downloaded 'hey_jarvis' as a placeholder for 'Hey Varonika'. You must say 'Hey Jarvis' to trigger unless a custom model is provided.")
     else:
         print("Wakeword model already exists.")
+
+    # Newer openwakeword wheels omit the internal models the ONNX runtime
+    # needs, so every wake word fails to load on a fresh install. Fetch
+    # them into the package if absent.
+    try:
+        import openwakeword
+    except ImportError:
+        print("openwakeword not installed; skipping wake word support files.")
+        openwakeword = None
+    if openwakeword is not None:
+        resources_dir = Path(openwakeword.__file__).parent / "resources" / "models"
+        resources_dir.mkdir(parents=True, exist_ok=True)
+        for name, url in WAKEWORD_RESOURCE_URLS.items():
+            dest = resources_dir / name
+            try:
+                valid = dest.exists() and dest.stat().st_size > 0
+            except OSError:
+                valid = False
+            if valid:
+                print(f"{name} already exists.")
+            else:
+                download_file(url, dest)
+                print(f"Downloaded missing {name} for wake word.")
 
 if __name__ == "__main__":
     main()
