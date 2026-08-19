@@ -266,6 +266,7 @@ def latex_to_text(text: str) -> str:
     buf = []
     math_buf = None      # None when not inside a $$ block
     span = None          # None when no inline span is open
+    in_fence = False
     i = 0
     n = len(text)
     while i < n:

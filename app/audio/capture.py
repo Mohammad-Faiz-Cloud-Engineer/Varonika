@@ -201,7 +201,17 @@ class AudioCapture:
             try:
                 self.queue.put_nowait(audio_np)
             except queue.Full:
-                pass
+                # Drop the oldest chunk so the queue stays real-time. Keeping
+                # the newest frame matters more for wake word and end-of-speech
+                # than preserving a backlog that is already several seconds late.
+                try:
+                    self.queue.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    self.queue.put_nowait(audio_np)
+                except queue.Full:
+                    pass
         return (in_data, pyaudio.paContinue)
 
     def _worker_loop(self, stop_event):

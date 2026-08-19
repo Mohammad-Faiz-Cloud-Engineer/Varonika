@@ -24,6 +24,15 @@ class UltronBrain(QWidget):
     def set_state(self, new_state: AppState):
         self.state = new_state
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self.timer.isActive():
+            self.timer.start(30)
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self.timer.stop()
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)

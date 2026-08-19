@@ -3,7 +3,6 @@ import re
 import threading
 import time
 import random
-from concurrent.futures import ThreadPoolExecutor
 from app.conversation.state import StateManager, AppState
 from app.audio.capture import AudioCapture
 from app.wakeword.detector import WakeWordDetector
@@ -19,6 +18,13 @@ class ConversationManager:
         r"^\s*(hey|ok|okay)?\s*(varonika|veronica|varonica|varunika|veronika|jarvis)[,\s!?.-]*",
         re.IGNORECASE,
     )
+    # Whole-utterance only. A substring match would wipe the session when
+    # the user says something like "start over from the second paragraph".
+    _RESET_SESSION_RE = re.compile(
+        r"^\s*(please\s+)?(reset session|forget everything|clear history|start over)\s*[.!]?\s*$",
+        re.IGNORECASE,
+    )
+
     def __init__(self, config: Config, state_manager: StateManager):
         self.config = config
         self.state = state_manager
@@ -60,7 +66,6 @@ class ConversationManager:
         self._request_seq = 0
         
         self._stream_lock = threading.Lock()
-        self._transcribe_pool = ThreadPoolExecutor(max_workers=1)
 
         # Post-answer follow-up window: after she answers she keeps listening
         # briefly; if the user says nothing, she goes back to sleep.
@@ -88,6 +93,21 @@ class ConversationManager:
         self.stt.start_calibration(duration_sec=2.0)
         
         self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+        if self.stt.model is None:
+            self._emit_ui(
+                "System",
+                "Speech-to-text failed to load. Put ggml-small.en.bin in the models folder, then restart.",
+            )
+        if self.wakeword.model is None:
+            self._emit_ui(
+                "System",
+                "Wake word failed to load. Use Alt+Space to talk until the model is in place.",
+            )
+        if self.tts.pipeline is None:
+            self._emit_ui(
+                "System",
+                "Voice playback failed to load. Answers will still show in the window.",
+            )
         # Start opencode asynchronously
         asyncio.ensure_future(self._start_opencode(), loop=self._loop)
 
@@ -251,6 +271,14 @@ class ConversationManager:
                 for s in combined:
                     clean = self._format_speech(s)
                     if clean.strip():
+                        # Re-check after formatting: interrupt() can land
+                        # between the start-of-callback guards and speak(),
+                        # and would otherwise enqueue the cancelled tail on
+                        # the new TTS worker.
+                        with self._interrupt_lock:
+                            live = self._answer_in_flight
+                        if not live or self.opencode._stream_seq != self._request_seq:
+                            return
                         self.tts.speak(clean.strip())
                         
                 self._stream_buffer = sentences[-1] + unsafe_text
@@ -333,12 +361,26 @@ class ConversationManager:
             ready = self.stt.process_chunk(chunk)
             if ready:
                 self.state.set_state(AppState.TRANSCRIBING)
-                # Whisper inference is slow: never run it on the audio callback thread
-                self._transcribe_pool.submit(self._transcribe_and_process)
+                # Whisper inference is slow: never run it on the audio callback
+                # thread. Daemon so a long transcribe cannot block process exit.
+                threading.Thread(
+                    target=self._transcribe_and_process, daemon=True
+                ).start()
 
     def _transcribe_and_process(self):
         """Transcribe the buffered audio off the audio thread, then handle the command."""
+        with self.stt._lock:
+            start_gen = self.stt._transcribe_gen
         try:
+            if self.stt.model is None:
+                self.stt.reset()
+                self._emit_ui(
+                    "System",
+                    "I heard you, but speech-to-text is not loaded. Check the models folder.",
+                )
+                self._clear_follow_up()
+                self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+                return
             text = self.stt.transcribe()
             if text is None:
                 return  # transcription was invalidated (e.g. hotkey re-activation)
@@ -357,14 +399,22 @@ class ConversationManager:
             self.state.set_state(AppState.THINKING)
 
             # Send to OpenCode on the event loop
-            if self._loop and not self._loop.is_closed():
-                asyncio.run_coroutine_threadsafe(
-                    self._process_command(text), self._loop
-                )
+            if not self._loop or self._loop.is_closed():
+                self._emit_ui("System", "Cannot send the command; the app is shutting down.")
+                self._clear_follow_up()
+                self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+                return
+            asyncio.run_coroutine_threadsafe(
+                self._process_command(text), self._loop
+            )
         except Exception as e:
             print(f"Transcription error: {e}")
         finally:
-            if self.state.current == AppState.TRANSCRIBING:
+            # Only the transcription that still owns this generation may
+            # unwind TRANSCRIBING. A stale one that lost a reset/hotkey must
+            # not yank a newer listen/transcribe back to sleep.
+            if (self.state.current == AppState.TRANSCRIBING
+                    and start_gen == self.stt._transcribe_gen):
                 self._clear_follow_up()
                 self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
 
@@ -395,9 +445,7 @@ class ConversationManager:
             return
             
         # Check for context reset commands
-        lower_text = text.lower().strip()
-        reset_phrases = ["reset session", "forget everything", "clear history", "start over"]
-        if any(phrase in lower_text for phrase in reset_phrases):
+        if self._RESET_SESSION_RE.match(text):
             self._emit_ui("System", "Resetting OpenCode context...")
             try:
                 # Tell OpenCode to start a new session
@@ -467,7 +515,9 @@ class ConversationManager:
             with self._stream_lock:
                 if self._stream_buffer.strip():
                     clean = self._format_speech(self._stream_buffer)
-                    if clean.strip():
+                    with self._interrupt_lock:
+                        live = self._answer_in_flight
+                    if live and clean.strip() and self.opencode._stream_seq == request_seq:
                         self.tts.speak(clean.strip())
                     self._stream_buffer = ""
             # The answer is complete: the reverb tail may now run once the last

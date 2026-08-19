@@ -120,7 +120,11 @@ class TTSEngine:
         # takes effect from the next synthesized block on.
         self._volume = float(volume)
         # Ensure we have the language model, a = American English
-        self.pipeline = KPipeline(lang_code='a')
+        try:
+            self.pipeline = KPipeline(lang_code='a')
+        except Exception as e:
+            print(f"Error loading TTS: {e}")
+            self.pipeline = None
         self._stop_event = threading.Event()
         self._queue = queue.Queue()
         self._thread = None
@@ -280,11 +284,15 @@ class TTSEngine:
                 self._stream = None
 
     def start_worker(self):
+        self._launch_worker(bump=True)
+
+    def _launch_worker(self, bump: bool):
         with self._lock:
             # Invalidate any still-running producer before the stop event
             # is cleared. Clearing first left a window where the old
             # thread could resume and speak a cancelled answer.
-            self._generation += 1
+            if bump:
+                self._generation += 1
             gen = self._generation
             self._stop_event.clear()
         self._thread = threading.Thread(
@@ -321,7 +329,9 @@ class TTSEngine:
                 if stamp != self._generation:
                     # Enqueued before the last interrupt: it was already
                     # invalidated, drop it rather than speak the tail of a
-                    # cancelled request.
+                    # cancelled request. stop_and_clear already zeroed
+                    # pending; do not decrement or a newer speak() could
+                    # lose its echo-guard count.
                     continue
                 if self._stop_event.is_set() or gen != self._generation:
                     # A newer worker owns the queue now. Hand the item back
@@ -449,7 +459,15 @@ class TTSEngine:
 
     def speak(self, text: str):
         """Enqueue text to be spoken."""
+        if not text or self.pipeline is None:
+            return
         with self._lock:
+            # An interrupt holds this event until the replacement worker
+            # starts. Enqueueing during that window would either leak a
+            # pending-count (stale stamp after the generation bump) or
+            # speak the cancelled answer's tail on the new worker.
+            if self._stop_event.is_set():
+                return
             self._pending_items += 1
             # Stamp with the enqueue generation so a producer left over from
             # an interrupted worker can tell stale requests from fresh ones.
@@ -492,9 +510,10 @@ class TTSEngine:
         """Interrupts current speech and clears the queue and buffer."""
         with self._lock:
             self._stop_event.set()
-            # start_worker() bumps the generation when it restarts the
-            # worker, and that single bump invalidates the running
-            # producer. The stop event covers the gap before the restart.
+            # Bump here (not only in start_worker) so a speak() that raced
+            # in after pending was zeroed but before the worker restart
+            # cannot stamp with the old generation and leak is_speaking().
+            self._generation += 1
             self._speaking_owner = None
             self._pending_items = 0
             self._answer_ended = False
@@ -512,8 +531,8 @@ class TTSEngine:
         # after an abort can fail on WASAPI (WDM-KS device still settling),
         # and reopening always risks a fresh start/stop glitch.
         # restart worker immediately (orphan the old thread so the audio
-        # callback isn't blocked)
-        self.start_worker()
+        # callback isn't blocked). Generation already bumped above.
+        self._launch_worker(bump=False)
 
     def stop(self):
         with self._lock:

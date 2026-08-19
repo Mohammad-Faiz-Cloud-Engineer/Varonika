@@ -5,7 +5,11 @@ import time
 import threading
 
 class STTEngine:
-    def __init__(self, model_path: str, energy_threshold: float = 0.015, silence_timeout: float = 2.5, language: str = "en"):
+    # Hard cap so a long rant (or a stuck "speech" energy floor) cannot grow
+    # the buffer until the process runs out of memory. 60 s at 16 kHz.
+    MAX_AUDIO_SECONDS = 60.0
+
+    def __init__(self, model_path: str, energy_threshold: float = 0.015, silence_timeout: float = 2.5, language: str = "en", sample_rate: int = 16000):
         # pywhispercpp supports ggml formats
         print(f"Loading Whisper model from {model_path}...")
         try:
@@ -15,6 +19,8 @@ class STTEngine:
             self.model = None
         self.energy_threshold = energy_threshold
         self.silence_timeout = silence_timeout
+        self.sample_rate = sample_rate
+        self._max_samples = int(sample_rate * self.MAX_AUDIO_SECONDS)
 
         self._lock = threading.Lock()
         # Serializes Whisper inference: the underlying model is not safe for
@@ -24,6 +30,7 @@ class STTEngine:
         # inference and discards its result if it moved (hotkey re-activation).
         self._transcribe_gen = 0
         self.audio_buffer = []
+        self._buffered_samples = 0
         self.last_speech_time = time.monotonic()
         self.speech_seen = False
 
@@ -71,9 +78,12 @@ class STTEngine:
             if not self.speech_seen:
                 return False
             self.audio_buffer.append(audio_float)
+            self._buffered_samples += len(audio_float)
 
             if time.monotonic() - self.last_speech_time > self.silence_timeout:
                 return True # Ready to transcribe
+            if self._buffered_samples >= self._max_samples:
+                return True
         return False
 
     def transcribe(self) -> str | None:
@@ -86,6 +96,7 @@ class STTEngine:
             with self._lock:
                 if not self.audio_buffer or not self.speech_seen:
                     self.audio_buffer = []
+                    self._buffered_samples = 0
                     self.speech_seen = False
                     self.last_speech_time = time.monotonic()
                     return None
@@ -95,6 +106,7 @@ class STTEngine:
 
                 # Reset for next time
                 self.audio_buffer = []
+                self._buffered_samples = 0
                 self.speech_seen = False
                 self.last_speech_time = time.monotonic()
                 my_gen = self._transcribe_gen
@@ -122,6 +134,7 @@ class STTEngine:
     def reset(self):
         with self._lock:
             self.audio_buffer = []
+            self._buffered_samples = 0
             self.speech_seen = False
             self.last_speech_time = time.monotonic()
             self._transcribe_gen += 1

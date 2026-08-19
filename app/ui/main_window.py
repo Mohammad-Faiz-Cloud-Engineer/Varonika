@@ -159,13 +159,13 @@ class MainWindow(QMainWindow):
         # chunk can complete it, so raw '$' never flashes mid-stream.
         self._stream_pending = ""
 
-        self._populate_mic_devices()
+        self._populate_mic_placeholder()
         self.mic_combo.currentTextChanged.connect(self._on_mic_changed)
 
         # Bluetooth headsets connect and disconnect at any time: refresh the
         # mic list in the background so new/removed mics appear without a
         # restart. The availability probe opens devices, so it must never run
-        # on the UI thread.
+        # on the UI thread. Enumerate immediately, then every 10 seconds.
         self.mic_refresh_ready.connect(self._apply_mic_refresh)
         self._mic_refresh_stop = threading.Event()
         self._mic_refresh_thread = threading.Thread(
@@ -190,6 +190,7 @@ class MainWindow(QMainWindow):
         tray_menu.addAction(show_action)
         tray_menu.addAction(quit_action)
         self.tray.setContextMenu(tray_menu)
+        self.tray.activated.connect(self._on_tray_activated)
         self.tray.show()
 
         # Window style: a deep background so the two rounded cards stand out
@@ -198,16 +199,25 @@ class MainWindow(QMainWindow):
     def _thread_safe_emit(self, source, message):
         self.ui_signal.emit(source, message)
 
+    def _on_tray_activated(self, reason):
+        if reason in (
+            QSystemTrayIcon.ActivationReason.Trigger,
+            QSystemTrayIcon.ActivationReason.DoubleClick,
+        ):
+            self.showNormal()
+            self.raise_()
+            self.activateWindow()
+
     def _mic_refresh_loop(self):
         while not self._mic_refresh_stop.is_set():
-            time.sleep(10)
-            if self._mic_refresh_stop.is_set():
-                break
             try:
                 devices = self.manager.audio.list_input_devices()
             except Exception:
-                continue
-            self.mic_refresh_ready.emit(devices)
+                devices = None
+            if devices is not None:
+                self.mic_refresh_ready.emit(devices)
+            if self._mic_refresh_stop.wait(10):
+                break
 
     def _apply_mic_refresh(self, devices):
         # Never rebuild the list under an open menu
@@ -250,6 +260,18 @@ class MainWindow(QMainWindow):
         if audio.active_device == "Unavailable":
             return "Unavailable"
         return audio.device_name or audio.active_device
+
+    def _populate_mic_placeholder(self):
+        """Show System Default immediately; real devices arrive from the
+        background probe so the window never freezes on first paint."""
+        with QSignalBlocker(self.mic_combo):
+            self.mic_combo.clear()
+            self.mic_combo.addItem("System Default", "")
+            active = self._display_device()
+            if active and active not in ("", "System Default", "Unavailable"):
+                self.mic_combo.addItem(active, active)
+        self.sync_mic_combo()
+        self._update_mic_in_use()
 
     def sync_mic_combo(self):
         """Show the microphone the capture actually uses: the open stream's

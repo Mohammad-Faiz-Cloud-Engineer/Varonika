@@ -57,17 +57,39 @@ class VaronikaClient:
         # Pick the first allow-kind option. If OpenCode offered only deny
         # options, approving is wrong: deny explicitly instead of blindly
         # selecting the first (which could be a deny the agent never asked for).
-        allow_id = next((o.option_id for o in options if o.kind.startswith("allow")), None)
+        allow_id = next(
+            (o.option_id for o in options if str(getattr(o, "kind", "")).startswith("allow")),
+            None,
+        )
         if allow_id is None:
             title = getattr(tool_call, "title", None) or "unknown tool"
             print(f"Permission request denied: no allow option offered for {title}")
             return RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
         return RequestPermissionResponse(outcome=AllowedOutcome(outcome="selected", option_id=allow_id))
 
-    async def read_text_file(self, path: str, session_id: str, **kwargs: Any) -> ReadTextFileResponse:
+    async def read_text_file(
+        self,
+        path: str,
+        session_id: str,
+        limit: int | None = None,
+        line: int | None = None,
+        **kwargs: Any,
+    ) -> ReadTextFileResponse:
+        """Read a file slice. ACP `line` is 1-based; `limit` is a line count, not bytes."""
         try:
+            start = line if (line is not None and line > 0) else 1
             with open(path, "r", encoding="utf-8", errors="replace") as f:
-                content = f.read(kwargs.get("limit", None))
+                if start == 1 and limit is None:
+                    content = f.read()
+                else:
+                    rows = []
+                    for i, row in enumerate(f, start=1):
+                        if i < start:
+                            continue
+                        rows.append(row)
+                        if limit is not None and len(rows) >= limit:
+                            break
+                    content = "".join(rows)
             return ReadTextFileResponse(content=content)
         except Exception as e:
             return ReadTextFileResponse(content=f"Error reading file: {e}")
