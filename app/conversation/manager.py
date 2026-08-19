@@ -11,6 +11,7 @@ from app.stt.whisper_engine import STTEngine
 from app.tts.kokoro_engine import TTSEngine
 from app.opencode.client import OpenCodeClient
 from app.config.settings import Config, save_config_field
+from app.formatting import latex_to_text
 
 
 class ConversationManager:
@@ -505,6 +506,17 @@ class ConversationManager:
         text = re.sub(r'`[^`]+`', ' code snippet ', text)
         # Remove unclosed inline code at the end
         text = re.sub(r'`[^`]*$', ' code snippet ', text)
+        # Rewrite LaTeX math into readable text (Greek letters, fractions,
+        # superscripts) so she does not speak "dollar tau equals..."
+        text = latex_to_text(text)
+        # A streaming chunk can end in the middle of math, leaving a lone
+        # '$' behind or an unconverted LaTeX command. Never let either
+        # reach the speaker. Letters-only so real newlines (\n) survive.
+        # The '^' is the degraded form of an unmapped superscript: it is
+        # never spoken well, so drop it.
+        text = text.replace('$', '')
+        text = text.replace('^', '')
+        text = re.sub(r'\\([a-zA-Z]+)', r'\1', text)
         # Remove markdown headers. Anchored to the line start so inline '#'
         # characters are kept (without this, "C#" would be spoken as "C").
         text = re.sub(r'(?m)^\s*#+\s*', '', text)

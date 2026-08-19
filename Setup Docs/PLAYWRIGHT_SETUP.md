@@ -121,7 +121,7 @@ Point the server at a permanent profile folder of its own. The first time it run
 You can point the server straight at the profile your normal Chrome uses, so all your existing logins are already there. On Windows that folder is:
 
 ```text
-C:\Users\<you>\AppData\Local\Google\Chrome\User Data\Default
+C:\Users\<you>\AppData\Local\Google\Chrome\User Data
 ```
 
 There are two important rules:
@@ -134,7 +134,7 @@ Example with your real profile:
 ```json
 "command": [
   "npx", "-y", "@playwright/mcp@latest",
-  "--browser=chrome", "--user-data-dir=C:\\Users\\you\\AppData\\Local\\Google\\Chrome\\User Data\\Default"
+  "--browser=chrome", "--user-data-dir=C:\\Users\\you\\AppData\\Local\\Google\\Chrome\\User Data"
 ]
 ```
 

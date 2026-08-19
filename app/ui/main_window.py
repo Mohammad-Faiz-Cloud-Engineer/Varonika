@@ -12,6 +12,7 @@ import qasync
 from app.ui.ultron_brain import UltronBrain
 from app.conversation.state import AppState
 from app.config.settings import save_config_field
+from app.formatting import latex_to_text
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
@@ -313,7 +314,7 @@ class MainWindow(QMainWindow):
 
     def _markdown_fragment(self, text):
         return QTextDocumentFragment.fromMarkdown(
-            text,
+            latex_to_text(text),
             QTextDocument.MarkdownFeature.MarkdownDialectGitHub,
         )
 
