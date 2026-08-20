@@ -88,28 +88,17 @@ def main():
     else:
         print("Wakeword model already exists.")
 
-    # Newer openwakeword wheels omit the internal models the ONNX runtime
-    # needs, so every wake word fails to load on a fresh install. Fetch
-    # them into the package if absent.
-    try:
-        import openwakeword
-    except ImportError:
-        print("openwakeword not installed; skipping wake word support files.")
-        openwakeword = None
-    if openwakeword is not None:
-        resources_dir = Path(openwakeword.__file__).parent / "resources" / "models"
-        resources_dir.mkdir(parents=True, exist_ok=True)
-        for name, url in WAKEWORD_RESOURCE_URLS.items():
-            dest = resources_dir / name
-            try:
-                valid = dest.exists() and dest.stat().st_size > 0
-            except OSError:
-                valid = False
-            if valid:
-                print(f"{name} already exists.")
-            else:
-                download_file(url, dest)
-                print(f"Downloaded missing {name} for wake word.")
+    for name, url in WAKEWORD_RESOURCE_URLS.items():
+        dest = models_dir / name
+        try:
+            valid = dest.exists() and dest.stat().st_size > 0
+        except OSError:
+            valid = False
+        if valid:
+            print(f"{name} already exists.")
+        else:
+            download_file(url, dest)
+            print(f"Downloaded missing {name} for wake word.")
 
 if __name__ == "__main__":
     main()

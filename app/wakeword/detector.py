@@ -15,9 +15,10 @@ WAKEWORD_RESOURCE_URLS = {
 _MAX_ATTEMPTS = 3
 
 def _resource_path(name):
+    # Use the project-local models folder to avoid permission errors when
+    # openwakeword is installed globally/system-wide.
     return os.path.join(
-        os.path.dirname(os.path.abspath(openwakeword.__file__)),
-        "resources",
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "models",
         name,
     )
@@ -71,7 +72,14 @@ class WakeWordDetector:
     def _load(self, model_path):
         ensure_wakeword_resources()
         try:
-            model = Model(wakeword_models=[model_path], inference_framework="onnx")
+            melspec_path = _resource_path("melspectrogram.onnx")
+            embed_path = _resource_path("embedding_model.onnx")
+            model = Model(
+                wakeword_models=[model_path],
+                inference_framework="onnx",
+                melspec_model_path=melspec_path,
+                embedding_model_path=embed_path
+            )
             return model, list(model.models.keys())[0]
         except Exception as e:
             print(f"Error loading wake word model: {e}")

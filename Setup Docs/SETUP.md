@@ -109,6 +109,8 @@ Varonika needs two models before she can hear and speak:
 
 - `models/ggml-small.en.bin` (Whisper, turns your speech into text)
 - `models/wakeword.onnx` (wake word, hears "Hey Varonika")
+- `models/melspectrogram.onnx` (wake word support model)
+- `models/embedding_model.onnx` (wake word support model)
 
 Download them with:
 
