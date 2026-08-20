@@ -48,6 +48,10 @@ class ConversationManager:
         # Wire up streaming callbacks
         self.opencode.varonika_client.on_text_chunk = self._on_stream_text
         self.opencode.varonika_client.on_tool_start = self._on_tool_start
+        # Connection-state changes (connect, disconnect, reconnect) update
+        # the UI and the started flag, so the "OpenCode connected" message
+        # is revoked when the connection drops instead of staying stale.
+        self.opencode.on_status_change = self._on_opencode_status
 
         self._stream_buffer = ""
         # Monotonic interrupt generation. A request captures the generation
@@ -114,20 +118,19 @@ class ConversationManager:
     async def _start_opencode(self):
         try:
             await self.opencode.start()
-            self._opencode_started = True
-            model = await self.opencode.get_current_model()
-            if model in ("unknown", "default", "", None):
-                self._emit_ui(
-                    "System",
-                    "OpenCode connected, but no model is configured.\n"
-                    "Run 'opencode' in a terminal and use /connect to add a model.",
-                )
-            else:
-                self._emit_ui("System", f"OpenCode connected.\nSession: {self.opencode.session_id}\nModel: {model}")
         except Exception as e:
             print(f"Failed to start OpenCode: {e}")
             self._emit_ui("System", f"OpenCode unavailable: {e}")
             self._opencode_started = False
+            # Keep trying in the background: a transient failure (or opencode
+            # installed later) self-heals without a restart, and the client
+            # reports the successful reconnect through on_status_change.
+            asyncio.ensure_future(self.opencode.ensure_connected())
+
+    def _on_opencode_status(self, message: str, connected: bool):
+        """Called by the OpenCode client on every connect/disconnect/reconnect."""
+        self._opencode_started = connected
+        self._emit_ui("System", message)
 
     def set_ui_callback(self, cb):
         self.ui_callback = cb
@@ -443,13 +446,25 @@ class ConversationManager:
             interrupt_gen = self._interrupt_gen
             self._request_seq += 1
             request_seq = self._request_seq
-        if not self._opencode_started:
-            self.tts.speak("OpenCode isn't available right now.")
-            self.tts.signal_answer_end()
-            self._emit_ui("Varonika", "OpenCode isn't available right now.")
-            self._clear_follow_up()
-            self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
-            return
+        if not self.opencode.is_connected():
+            # Live check: also covers a connection that dropped while idle
+            # and whose background reconnect has not finished yet. An
+            # interrupt landing while we reconnect must not leave the state
+            # machine stuck in THINKING.
+            try:
+                ok = await self.opencode.ensure_connected()
+            except asyncio.CancelledError:
+                self._return_after_interrupt(request_seq)
+                return
+            except Exception:
+                ok = False
+            if not ok:
+                self.tts.speak("OpenCode isn't available right now.")
+                self.tts.signal_answer_end()
+                self._emit_ui("Varonika", "OpenCode isn't available right now.")
+                self._clear_follow_up()
+                self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+                return
             
         # Check for context reset commands
         if self._RESET_SESSION_RE.match(text):
@@ -501,7 +516,20 @@ class ConversationManager:
                     self._return_after_interrupt(request_seq)
                     return
                 print(f"OpenCode error: {e}")
-                self.tts.speak("Sorry, there was an error communicating with OpenCode.")
+                if self.opencode.is_disconnected():
+                    # The connection broke mid-answer. Bring it back and say
+                    # the answer is lost; never pretend the stale "connected"
+                    # state still holds.
+                    try:
+                        ok = await self.opencode.ensure_connected()
+                    except Exception:
+                        ok = False
+                    if ok:
+                        self.tts.speak("OpenCode lost its connection. I am back online, please say that again.")
+                    else:
+                        self.tts.speak("OpenCode lost its connection and is still unavailable.")
+                else:
+                    self.tts.speak("Sorry, there was an error communicating with OpenCode.")
                 self.tts.signal_answer_end()
                 self._emit_ui("Varonika", f"Error: {e}")
                 self._clear_follow_up()
