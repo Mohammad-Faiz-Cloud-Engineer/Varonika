@@ -214,7 +214,7 @@ class ConversationManager:
         # check the cancelled answer's tail would be spoken as the new
         # answer and flip the state machine out of THINKING. _stream_seq is
         # set by OpenCodeClient.prompt() right before the request is sent.
-        if self.opencode._stream_seq != self._request_seq:
+        if self.opencode.stream_seq != self._request_seq:
             return
         if self.state.current not in [AppState.THINKING, AppState.EXECUTING_TOOL, AppState.SPEAKING]:
             return
@@ -289,7 +289,7 @@ class ConversationManager:
                         # the new TTS worker.
                         with self._interrupt_lock:
                             live = self._answer_in_flight
-                        if not live or self.opencode._stream_seq != self._request_seq:
+                        if not live or self.opencode.stream_seq != self._request_seq:
                             return
                         self.tts.speak(clean.strip())
                         
@@ -308,7 +308,7 @@ class ConversationManager:
             return
         # A stale request's tool events must not drive the state machine or
         # the UI after a newer request took over (same rule as _on_stream_text).
-        if self.opencode._stream_seq != self._request_seq:
+        if self.opencode.stream_seq != self._request_seq:
             return
         self.state.set_state(AppState.EXECUTING_TOOL)
 
@@ -318,7 +318,7 @@ class ConversationManager:
                         locations=None, status: str | None = None):
         if not self._answer_in_flight:
             return
-        if self.opencode._stream_seq != self._request_seq:
+        if self.opencode.stream_seq != self._request_seq:
             return
         # Only emit the first in_progress update per tool call.
         # The first ToolCallProgress carries the real data (command, file path).
@@ -436,8 +436,7 @@ class ConversationManager:
 
     def _transcribe_and_process(self):
         """Transcribe the buffered audio off the audio thread, then handle the command."""
-        with self.stt._lock:
-            start_gen = self.stt._transcribe_gen
+        start_gen = self.stt.snapshot_generation()
         try:
             if self.stt.model is None:
                 self.stt.reset()
@@ -452,8 +451,14 @@ class ConversationManager:
             if text is None:
                 return  # transcription was invalidated (e.g. hotkey re-activation)
             
-            # Remove Whisper noise/silence hallucinations like [BLANK_AUDIO] or (wind blowing)
-            text = re.sub(r'\[.*?\]|\(.*?\)|\*.*?\*', '', text)
+            # Remove Whisper noise/silence hallucinations like [BLANK_AUDIO] or (wind blowing).
+            # Only strip Whisper-style brackets, not all parenthesized text
+            # (which would remove legitimate content like "The quick (brown) fox").
+            # Bracket tags: all-caps words (BLANK_AUDIO, SOUND, MUSIC, etc.)
+            # and dot/ellipsis patterns ([...], [. .]).
+            text = re.sub(r'\[(?:[A-Z][A-Z_]+|\.[\.\s]*)\]', '', text)
+            # Parenthetical tags: common Whisper hallucination phrases.
+            text = re.sub(r'\((?:BLANK_AUDIO|CROSSTALK|silence|wind|music|sigh|laughs|applause|cheering)\)', '', text, flags=re.IGNORECASE)
             
             text = self._WAKE_PHRASE_RE.sub("", text, count=1).strip()
             if not text:
@@ -481,7 +486,7 @@ class ConversationManager:
             # unwind TRANSCRIBING. A stale one that lost a reset/hotkey must
             # not yank a newer listen/transcribe back to sleep.
             if (self.state.current == AppState.TRANSCRIBING
-                    and start_gen == self.stt._transcribe_gen):
+                    and start_gen == self.stt.current_generation):
                 self._clear_follow_up()
                 self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
 
@@ -608,7 +613,7 @@ class ConversationManager:
                     clean = self._format_speech(self._stream_buffer)
                     with self._interrupt_lock:
                         live = self._answer_in_flight
-                    if live and clean.strip() and self.opencode._stream_seq == request_seq:
+                    if live and clean.strip() and self.opencode.stream_seq == request_seq:
                         self.tts.speak(clean.strip())
                     self._stream_buffer = ""
             # The answer is complete: the reverb tail may now run once the last
@@ -651,11 +656,11 @@ class ConversationManager:
         # superscripts) so she does not speak "dollar tau equals..."
         text = latex_to_text(text)
         # A streaming chunk can end in the middle of math, leaving a lone
-        # '$' behind or an unconverted LaTeX command. Never let either
-        # reach the speaker. Letters-only so real newlines (\n) survive.
-        # The '^' is the degraded form of an unmapped superscript: it is
-        # never spoken well, so drop it.
-        text = text.replace('$', '')
+        # '$' behind or an unmapped LaTeX command. Drop leftover '$' and
+        # '^' that survived the LaTeX conversion. Without this, she says
+        # "dollar" for every unmatched delimiter. Only remove '$' NOT
+        # followed by a digit, so dollar amounts like "$100" survive.
+        text = re.sub(r'\$(?![0-9])', '', text)
         text = text.replace('^', '')
         text = re.sub(r'\\([a-zA-Z]+)', r'\1', text)
         # Remove markdown headers. Anchored to the line start so inline '#'

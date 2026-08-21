@@ -162,3 +162,18 @@ class STTEngine:
             self.speech_seen = False
             self.last_speech_time = time.monotonic()
             self._transcribe_gen += 1
+
+    @property
+    def current_generation(self):
+        """Public read-only accessor for the transcription generation counter."""
+        return self._transcribe_gen
+
+    def snapshot_generation(self):
+        """Atomically return the current generation under the lock.
+
+        The manager uses this to check whether a transcription that just
+        completed still owns the generation, without reaching into the
+        private _lock and _transcribe_gen directly.
+        """
+        with self._lock:
+            return self._transcribe_gen

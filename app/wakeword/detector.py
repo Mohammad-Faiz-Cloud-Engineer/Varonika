@@ -62,7 +62,7 @@ def ensure_wakeword_resources():
     them into the package if absent."""
     for name in WAKEWORD_RESOURCE_URLS:
         if not _valid_file(_resource_path(name)) and _ensure_resource(name) is None:
-            break
+            continue
 
 class WakeWordDetector:
     def __init__(self, model_path: str, threshold: float = 0.6):

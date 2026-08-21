@@ -2,6 +2,7 @@ import pyaudio
 import numpy as np
 import queue
 import threading
+import time
 
 class AudioCapture:
     def __init__(self, sample_rate=16000, chunk_size=1280, device_name=""): # 1280 is ~80ms at 16khz
@@ -27,6 +28,11 @@ class AudioCapture:
         # each other with a bogus host error, which reads as a mic dropout
         # every ~10 s with flaky Bluetooth headsets.
         self._pa_lock = threading.Lock()
+        # Cache for _is_available results: {index: (timestamp, result)}.
+        # Avoids opening a throwaway stream on every 10s refresh, which
+        # causes PortAudio contention and stutters the live mic.
+        self._availability_cache: dict[int, tuple[float, bool]] = {}
+        self._CACHE_TTL = 60.0
 
     def _canonical_name(self, index: int) -> str:
         """Full display name for a device index. PortAudio reports MME
@@ -75,7 +81,15 @@ class AudioCapture:
     def _is_available(self, index: int) -> bool:
         """True when the device actually opens for capture at our format.
         Paired-but-disconnected Bluetooth headsets leave ghost endpoints
-        that Windows lists but that cannot be opened."""
+        that Windows lists but that cannot be opened. Results are cached
+        for 60 seconds to avoid PortAudio contention from repeated probe
+        opens on every mic refresh."""
+        now = time.monotonic()
+        cached = self._availability_cache.get(index)
+        if cached is not None:
+            ts, result = cached
+            if now - ts < self._CACHE_TTL:
+                return result
         try:
             with self._pa_lock:
                 s = self.p.open(
@@ -84,8 +98,10 @@ class AudioCapture:
                     input_device_index=index,
                 )
                 s.close()
+            self._availability_cache[index] = (now, True)
             return True
         except Exception:
+            self._availability_cache[index] = (now, False)
             return False
 
     def list_input_devices(self):
@@ -325,11 +341,13 @@ class AudioCapture:
                 self.stream = None
             
         self._stop_event.set()
+        # Always send the sentinel before joining so the worker exits
+        # promptly regardless of whether it is blocked on queue.get().
+        try:
+            self.queue.put_nowait(None)
+        except queue.Full:
+            pass
         if self.worker_thread and self.worker_thread.is_alive():
-            try:
-                self.queue.put_nowait(None) # Sentinel
-            except queue.Full:
-                pass
             self.worker_thread.join(timeout=1.0)
             if self.worker_thread.is_alive():
                 print("Warning: Audio worker thread did not terminate.")

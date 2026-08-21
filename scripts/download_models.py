@@ -2,7 +2,6 @@ import urllib.request
 import shutil
 import sys
 import os
-import socket
 import tempfile
 from pathlib import Path
 
@@ -14,7 +13,8 @@ WAKEWORD_RESOURCE_URLS = {
 def download_file(url, destination):
     print(f"Downloading {url} to {destination}...")
     # A dead or blocked network must fail fast, not hang the app at startup.
-    socket.setdefaulttimeout(60)
+    # Use per-request timeout instead of socket.setdefaulttimeout to avoid
+    # affecting all sockets in the process.
     # A previously killed download (app closed mid-startup) leaves an orphan
     # .part behind; clean those up so they cannot accumulate on disk.
     for stale in destination.parent.glob(f".{destination.name}.*.part"):
@@ -28,16 +28,23 @@ def download_file(url, destination):
     os.close(fd)
     temp_path = Path(temp_path)
     
-    # We use a progress bar
-    def reporthook(count, block_size, total_size):
-        if total_size > 0:
-            progress = min(100, int(count * block_size * 100 / total_size))
-            sys.stdout.write(f"\rDownloading... {progress}%")
-            sys.stdout.flush()
-
     try:
-        urllib.request.urlretrieve(url, temp_path, reporthook=reporthook)
-        temp_path.replace(destination)
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            total = int(resp.headers.get("Content-Length", 0))
+            downloaded = 0
+            while True:
+                chunk = resp.read(8192)
+                if not chunk:
+                    break
+                with open(temp_path, "ab") as f:
+                    f.write(chunk)
+                downloaded += len(chunk)
+                if total > 0:
+                    progress = min(100, downloaded * 100 // total)
+                    sys.stdout.write(f"\rDownloading... {progress}%")
+                    sys.stdout.flush()
+        os.replace(temp_path, destination)
         print("\nDownload complete.")
     except Exception as e:
         temp_path.unlink(missing_ok=True)

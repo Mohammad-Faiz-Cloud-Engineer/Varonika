@@ -1,4 +1,6 @@
+import os
 import yaml
+import tempfile
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -52,8 +54,23 @@ def save_config_field(key: str, value) -> bool:
                 if isinstance(loaded, dict):
                     data = loaded
         data[key] = value
-        with open(config_path, "w", encoding="utf-8") as f:
-            yaml.safe_dump(data, f, sort_keys=False, default_flow_style=False)
+        # Atomic write: write to a temp file in the same directory, then
+        # rename. A crash or power loss mid-write corrupts only the temp
+        # file, never the real config.yaml.
+        fd, temp_path = tempfile.mkstemp(
+            dir=config_path.parent, prefix=".config.", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                yaml.safe_dump(data, f, sort_keys=False, default_flow_style=False)
+            os.replace(temp_path, config_path)
+        except Exception:
+            # Clean up the temp file on failure
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            raise
         return True
     except (OSError, yaml.YAMLError) as e:
         print(f"Warning: could not save config '{key}': {e}")
@@ -74,6 +91,10 @@ def load_config() -> Config:
                             # A typo like "tts_voicee" must not silently do
                             # nothing: tell the user which key is bogus.
                             print(f"Warning: unknown config key '{k}' ignored. See README for valid keys.")
+                            continue
+                        if v is None:
+                            # YAML null → Python None. str(None) → "None",
+                            # int(None) → TypeError. Skip silently.
                             continue
                         default_val = getattr(c, k)
                         expected_type = type(default_val)

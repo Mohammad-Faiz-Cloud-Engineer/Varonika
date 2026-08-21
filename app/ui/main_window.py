@@ -97,9 +97,14 @@ class MainWindow(QMainWindow):
         self.vol_label = QLabel("TTS Vol:")
         self.vol_label.setStyleSheet("color: #888; font-size: 12px;")
         self.vol_slider = QSlider(Qt.Orientation.Horizontal)
-        self.vol_slider.setRange(50, 500)
+        self.vol_slider.setRange(0, 500)
         self._last_vol_save = 0.0
-        self.vol_slider.setValue(int(self.manager.config.tts_volume * 100))
+        # Clamp the initial value to the slider range so the UI and the
+        # actual volume stay in sync even if config.yaml has a value
+        # outside the slider bounds (e.g. tts_volume: 0.3 → slider 30,
+        # but old range started at 50).
+        initial_vol = max(0, min(500, int(self.manager.config.tts_volume * 100)))
+        self.vol_slider.setValue(initial_vol)
         self.vol_slider.setStyleSheet(
             "color: #00d4ff; font-size: 12px; background: #0f0f23;"
             "QSlider::groove:horizontal { height: 6px; border-radius: 3px;"
@@ -158,6 +163,9 @@ class MainWindow(QMainWindow):
         # The tail from the last unclosed '$' is held back until the next
         # chunk can complete it, so raw '$' never flashes mid-stream.
         self._stream_pending = ""
+        # True only during close_app: closeEvent minimizes to tray by
+        # default; this flag tells it to actually quit.
+        self._force_quit = False
 
         self._populate_mic_placeholder()
         self.mic_combo.currentTextChanged.connect(self._on_mic_changed)

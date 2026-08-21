@@ -148,6 +148,9 @@ class VaronikaClient:
 
 
 class OpenCodeClient:
+    # Public read-only accessors for the stream sequence. The manager uses
+    # this to drop straggling chunks from a cancelled prompt. Exposing it
+    # as a property avoids reaching into the private _stream_seq directly.
     # Hard cap on a single prompt (including long tool runs). A wedged or
     # silently dead connection must never leave the user waiting forever;
     # on timeout the connection is reset and the next prompt reconnects.
@@ -217,6 +220,11 @@ class OpenCodeClient:
         # (the ACP server keeps streaming until the old prompt completes),
         # and the manager uses this to drop them.
         self._stream_seq = None
+
+    @property
+    def stream_seq(self):
+        """Public read-only accessor for the current stream sequence."""
+        return self._stream_seq
 
     async def get_current_model(self) -> str:
         """Fetches the currently configured OpenCode model (cached after first lookup)."""
