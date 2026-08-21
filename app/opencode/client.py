@@ -322,6 +322,10 @@ class OpenCodeClient:
         """Spawn the ACP process, create a session, arm the watcher, report status."""
         await self._spawn_and_connect()
         self._disconnected = False
+        # Cancel the old watcher before replacing it so the stale
+        # task does not accumulate and hold a reference to a dead process.
+        if self._watcher_task is not None and not self._watcher_task.done():
+            self._watcher_task.cancel()
         self._watcher_task = asyncio.ensure_future(self._watch())
         if self._heartbeat_task is None or self._heartbeat_task.done():
             self._heartbeat_task = asyncio.ensure_future(self._heartbeat_loop())
@@ -441,6 +445,9 @@ class OpenCodeClient:
             return
         self._disconnected = True
         self._epoch += 1
+        # Invalidate the cached model so the next connection fetches
+        # the current value instead of reporting a stale one.
+        self._model = None
         print(f"OpenCode disconnected: {reason}")
         self._emit_status("OpenCode lost its connection. Reconnecting...", connected=False)
         await self._teardown_current()

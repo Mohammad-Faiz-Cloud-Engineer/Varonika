@@ -45,5 +45,8 @@ class HotkeyListener:
         if self._hotkey is not None:
             try:
                 keyboard.remove_hotkey(self._hotkey)
-            except Exception:
-                keyboard.unhook_all()
+            except Exception as e:
+                # Do not call unhook_all() here: it would silently kill
+                # every keyboard hook in the process, including hooks
+                # registered by other components or accessibility tools.
+                print(f"Warning: could not remove hotkey: {e}")

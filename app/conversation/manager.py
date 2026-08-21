@@ -384,6 +384,7 @@ class ConversationManager:
 
                 self._clear_follow_up()
                 self._emit_ui("System", "Wake word detected!")
+                self.tts.signal_answer_start()
                 self.tts.speak(random.choice(["Yes Boss", "Yes Sir"]))
                 self.tts.signal_answer_end()
                 self.state.set_state(AppState.LISTENING)
@@ -644,14 +645,6 @@ class ConversationManager:
 
     def _format_speech(self, text: str) -> str:
         """Convert raw LLM output into speakable text."""
-        # Remove code blocks
-        text = re.sub(r'```[\s\S]*?```', ' I\'ve generated the code. ', text)
-        # Remove unclosed code blocks at the end
-        text = re.sub(r'```[\s\S]*$', ' I\'ve generated the code. ', text)
-        # Remove inline code
-        text = re.sub(r'`[^`]+`', ' code snippet ', text)
-        # Remove unclosed inline code at the end
-        text = re.sub(r'`[^`]*$', ' code snippet ', text)
         # Rewrite LaTeX math into readable text (Greek letters, fractions,
         # superscripts) so she does not speak "dollar tau equals..."
         text = latex_to_text(text)

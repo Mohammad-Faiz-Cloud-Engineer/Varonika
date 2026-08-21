@@ -222,7 +222,7 @@ class MainWindow(QMainWindow):
                 devices = self.manager.audio.list_input_devices()
             except Exception:
                 devices = None
-            if devices is not None:
+            if devices is not None and not self._mic_refresh_stop.is_set():
                 self.mic_refresh_ready.emit(devices)
             if self._mic_refresh_stop.wait(10):
                 break
@@ -377,6 +377,8 @@ class MainWindow(QMainWindow):
         cursor.insertHtml(html_text)
 
     def _on_ui_message(self, source, message):
+        if getattr(self, '_force_quit', False):
+            return
         if source == "Varonika_stream":
             # Streaming chunk: append to the stream block (not document end,
             # so System notes appended mid-stream are never polluted)
@@ -458,6 +460,8 @@ class MainWindow(QMainWindow):
         sb.setValue(sb.maximum())
 
     def _on_state_change(self, state):
+        if getattr(self, '_force_quit', False):
+            return
         state_colors = {
             AppState.LISTENING_FOR_WAKEWORD: "#888",
             AppState.LISTENING: "#00ff66",
@@ -487,6 +491,11 @@ class MainWindow(QMainWindow):
     @qasync.asyncSlot()
     async def close_app(self):
         self._force_quit = True
+        # Disconnect signals before tearing down so no queued events
+        # target a destroyed widget.
+        self.manager.state.remove_listener(self._thread_safe_state)
+        self.manager.set_ui_callback(None)
+        self.mic_refresh_ready.disconnect()
         self._mic_refresh_stop.set()
         try:
             import asyncio
