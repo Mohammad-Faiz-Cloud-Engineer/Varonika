@@ -120,9 +120,12 @@ class AudioCapture:
                     name = info.get("name", f"Device {i}")
                     if any(m in name.lower() for m in self._VIRTUAL_MARKERS):
                         continue
-                    api_name = self.p.get_host_api_info_by_index(
-                        info.get("hostApi", 0)
-                    ).get("name", "")
+                    try:
+                        api_name = self.p.get_host_api_info_by_index(
+                            info.get("hostApi", 0)
+                        ).get("name", "")
+                    except Exception:
+                        api_name = ""
                     is_modern = "wasapi" in api_name.lower() or "wdm-ks" in api_name.lower()
                     devices.append((i, name, is_modern))
             except Exception:
@@ -210,24 +213,30 @@ class AudioCapture:
         self.callbacks.append(callback)
 
     def _audio_callback(self, in_data, frame_count, time_info, status):
-        if self.is_listening:
-            audio_np = np.frombuffer(in_data, dtype=np.int16).copy()
-            # Put audio data in the queue to be processed by the background worker.
-            # This prevents blocking the real-time audio thread.
-            try:
-                self.queue.put_nowait(audio_np)
-            except queue.Full:
-                # Drop the oldest chunk so the queue stays real-time. Keeping
-                # the newest frame matters more for wake word and end-of-speech
-                # than preserving a backlog that is already several seconds late.
-                try:
-                    self.queue.get_nowait()
-                except queue.Empty:
-                    pass
+        try:
+            if self.is_listening:
+                audio_np = np.frombuffer(in_data, dtype=np.int16).copy()
+                # Put audio data in the queue to be processed by the background worker.
+                # This prevents blocking the real-time audio thread.
                 try:
                     self.queue.put_nowait(audio_np)
                 except queue.Full:
-                    pass
+                    # Drop the oldest chunk so the queue stays real-time. Keeping
+                    # the newest frame matters more for wake word and end-of-speech
+                    # than preserving a backlog that is already several seconds late.
+                    try:
+                        self.queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                    try:
+                        self.queue.put_nowait(audio_np)
+                    except queue.Full:
+                        pass
+        except Exception:
+            # An unhandled exception here silently kills the PortAudio stream
+            # with no way to recover. Always return a valid tuple so the
+            # microphone stays alive even if one chunk fails.
+            pass
         return (in_data, pyaudio.paContinue)
 
     def _worker_loop(self, stop_event):
@@ -329,6 +338,10 @@ class AudioCapture:
             return
         self.device_name = name
         self.stop()
+        # A mic switch can reconnect a Bluetooth device or bring up a
+        # previously dead jack: clear the cached probe results so every
+        # device is freshly tested on the next enumeration.
+        self._availability_cache.clear()
         self.start()
         print(f"Microphone in use: {self.active_device}")
 

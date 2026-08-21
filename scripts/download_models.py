@@ -74,8 +74,10 @@ def main():
         print("Whisper model already exists.")
 
     # Download OpenWakeWord Model: prefer the custom 'Hey Varonika' model
-    # if present at the project root, otherwise fetch a placeholder so the
-    # system can still boot (says 'Hey Jarvis' instead).
+    # if present at the project root, otherwise fetch a 'hey_jarvis'
+    # placeholder so the system can still boot. The placeholder requires
+    # saying "Hey Jarvis" instead of "Hey Varonika" until a custom model
+    # is provided.
     wakeword_model = models_dir / "wakeword.onnx"
     custom_model = base_dir / "Hey_Varonika.onnx"
     use_custom = False
