@@ -48,12 +48,14 @@ class ConversationManager:
         # Wire up streaming callbacks
         self.opencode.varonika_client.on_text_chunk = self._on_stream_text
         self.opencode.varonika_client.on_tool_start = self._on_tool_start
+        self.opencode.varonika_client.on_tool_update = self._on_tool_update
         # Connection-state changes (connect, disconnect, reconnect) update
         # the UI and the started flag, so the "OpenCode connected" message
         # is revoked when the connection drops instead of staying stale.
         self.opencode.on_status_change = self._on_opencode_status
 
         self._stream_buffer = ""
+        self._seen_tool_ids: set[str] = set()
         # Monotonic interrupt generation. A request captures the generation
         # when it starts and is considered interrupted iff it has moved since.
         # This avoids the stale-flag race where a cancelled request's error
@@ -295,7 +297,8 @@ class ConversationManager:
             else:
                 self._stream_buffer = safe_text + unsafe_text
 
-    def _on_tool_start(self, title: str, tool_call_id: str):
+    def _on_tool_start(self, title: str, tool_call_id: str, *,
+                        kind: str | None = None, raw_input: dict | None = None):
         # After an interrupt the cancelled prompt keeps running (ACP often
         # ignores cancel). Its tool events still carry the old stream_seq,
         # which still equals _request_seq until a newer prompt starts.
@@ -308,7 +311,61 @@ class ConversationManager:
         if self.opencode._stream_seq != self._request_seq:
             return
         self.state.set_state(AppState.EXECUTING_TOOL)
-        self._emit_ui("System", f"Tool: {title}")
+
+    def _on_tool_update(self, tool_call_id: str, *,
+                        title: str | None = None, kind: str | None = None,
+                        raw_input: dict | None = None,
+                        locations=None, status: str | None = None):
+        if not self._answer_in_flight:
+            return
+        if self.opencode._stream_seq != self._request_seq:
+            return
+        # Only emit the first in_progress update per tool call.
+        # The first ToolCallProgress carries the real data (command, file path).
+        # Subsequent in_progress updates repeat the same data.
+        if status != "in_progress":
+            return
+        if tool_call_id in self._seen_tool_ids:
+            return
+        self._seen_tool_ids.add(tool_call_id)
+        desc = self._tool_description_from_progress(title, kind, raw_input, locations)
+        if desc:
+            self.state.set_state(AppState.EXECUTING_TOOL)
+            self._emit_ui("System", desc)
+
+    @staticmethod
+    def _tool_description_from_progress(
+        title: str | None, kind: str | None,
+        raw_input: dict | None, locations=None,
+    ) -> str:
+        """Build a human-readable one-liner from ToolCallProgress data."""
+        if raw_input is None:
+            raw_input = {}
+        try:
+            if kind == "execute":
+                cmd = raw_input.get("command", "") or (title or "command")
+                return f"Running: {cmd[:80]}{'...' if len(cmd) > 80 else ''}"
+            if kind == "read":
+                path = raw_input.get("filePath", "") or raw_input.get("path", "")
+                if not path and locations:
+                    path = getattr(locations[0], "path", "") or ""
+                return f"Reading: {path}" if path else f"Tool: {title or 'read'}"
+            if kind == "edit":
+                path = raw_input.get("filePath", "") or raw_input.get("path", "")
+                if not path and locations:
+                    path = getattr(locations[0], "path", "") or ""
+                return f"Editing: {path}" if path else f"Tool: {title or 'edit'}"
+            if kind == "search":
+                pattern = raw_input.get("pattern", "")
+                return f"Searching: {pattern}" if pattern else f"Tool: {title or 'search'}"
+            if kind == "fetch":
+                url = raw_input.get("url", "")
+                return f"Fetching: {url[:80]}{'...' if len(url) > 80 else ''}" if url else f"Fetching: {title}" if title else "Fetching..."
+            if kind == "think":
+                return "Thinking..."
+        except Exception:
+            pass
+        return f"Tool: {title}" if title else ""
 
     def _on_audio_chunk(self, chunk):
         """Audio callback from the microphone: runs on the audio callback thread."""
@@ -488,6 +545,7 @@ class ConversationManager:
 
         with self._stream_lock:
             self._stream_buffer = ""
+        self._seen_tool_ids.clear()
         # A fresh answer: the reverb tail must not fire until the final
         # flush below. Without this, a stale end signal (e.g. from the
         # "Yes Boss" ack) lets the echo guard drop mid-answer, the state

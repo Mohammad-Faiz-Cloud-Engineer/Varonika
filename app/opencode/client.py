@@ -6,7 +6,7 @@ from typing import Any
 from app.config.settings import BASE_DIR
 from acp import RequestError, spawn_agent_process
 from acp.schema import (
-    AgentMessageChunk, ToolCallStart,
+    AgentMessageChunk, ToolCallStart, ToolCallProgress,
     PermissionOption, AllowedOutcome, DeniedOutcome, RequestPermissionResponse,
     ReadTextFileResponse,
     CreateTerminalResponse, TerminalOutputResponse,
@@ -26,7 +26,8 @@ class VaronikaClient:
         self.connection = None  # Will be set to the Agent-side connection
         self.session_id = None
         self.on_text_chunk = None       # callback(str)
-        self.on_tool_start = None       # callback(title, tool_call_id)
+        self.on_tool_start = None       # callback(title, tool_call_id, *, kind, raw_input)
+        self.on_tool_update = None      # callback(tool_call_id, *, title, kind, raw_input, locations, status)
         self._accumulated_text = ""
 
     def on_connect(self, conn) -> None:
@@ -47,7 +48,23 @@ class VaronikaClient:
 
         elif isinstance(update, ToolCallStart):
             if self.on_tool_start:
-                self.on_tool_start(update.title or "Tool", update.tool_call_id)
+                self.on_tool_start(
+                    update.title or "Tool",
+                    update.tool_call_id,
+                    kind=update.kind,
+                    raw_input=update.raw_input,
+                )
+
+        elif isinstance(update, ToolCallProgress):
+            if self.on_tool_update:
+                self.on_tool_update(
+                    update.tool_call_id,
+                    title=update.title,
+                    kind=update.kind,
+                    raw_input=update.raw_input,
+                    locations=update.locations,
+                    status=update.status,
+                )
 
     async def request_permission(
         self, options: list[PermissionOption], session_id: str, tool_call: ToolCallUpdate, **kwargs: Any
