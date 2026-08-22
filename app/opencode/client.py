@@ -207,8 +207,12 @@ class OpenCodeClient:
         else:
             import shutil
             exe = shutil.which("opencode")
-            self._opencode_cmd = ([exe, "acp"] if exe else ["opencode", "acp"])
-            self._exe_resolved = exe is not None
+            if exe is None:
+                self._opencode_cmd = None
+                self._exe_resolved = False
+            else:
+                self._opencode_cmd = [exe, "acp"]
+                self._exe_resolved = True
         self.session_id = None
         self._model = None
         # Serializes prompts/resets: two concurrent requests on one session
@@ -230,12 +234,14 @@ class OpenCodeClient:
         """Fetches the currently configured OpenCode model (cached after first lookup)."""
         if self._model:
             return self._model
-        import json, shutil
-        opencode_exe = shutil.which("opencode") or "opencode"
+        ok, msg = self.validate_opencode_available()
+        if not ok:
+            return "unknown"
+        import json
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
-                opencode_exe, "debug", "config",
+                *self._opencode_cmd, "debug", "config",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
@@ -262,6 +268,23 @@ class OpenCodeClient:
                 except Exception:
                     pass
 
+    def validate_opencode_available(self) -> tuple[bool, str]:
+        """Check if opencode binary is available. Returns (available, error_message)."""
+        if self._exe_resolved and self._opencode_cmd:
+            return True, ""
+        import shutil
+        exe = shutil.which("opencode")
+        if exe:
+            self._opencode_cmd = [exe, "acp"]
+            self._exe_resolved = True
+            return True, ""
+        return (
+            False,
+            "opencode not found on PATH.\n"
+            "Install it with: npm install -g opencode-ai\n"
+            "Then close and reopen your terminal before starting Varonika."
+        )
+
     async def start(self, cwd: str | None = None):
         """Starts the OpenCode ACP process and connects to it via stdio.
 
@@ -274,11 +297,9 @@ class OpenCodeClient:
         self._cwd = str(Path(cwd).resolve()) if cwd else str(BASE_DIR)
         if self.is_connected():
             return
-        if not self._exe_resolved:
-            raise RuntimeError(
-                "opencode not found on PATH. Install it with 'npm install -g opencode-ai', "
-                "then close and reopen the terminal before starting Varonika."
-            )
+        ok, msg = self.validate_opencode_available()
+        if not ok:
+            raise RuntimeError(msg)
         async with self._connect_lock:
             if self.is_connected():
                 return
@@ -297,6 +318,10 @@ class OpenCodeClient:
         """
         if self.is_connected():
             return True
+        ok, msg = self.validate_opencode_available()
+        if not ok:
+            self._emit_status(msg, connected=False)
+            return False
         async with self._connect_lock:
             if self.is_connected():
                 return True
@@ -465,6 +490,14 @@ class OpenCodeClient:
             await asyncio.sleep(delay)
             if self._stopping or not self._disconnected:
                 return
+            # Validate binary is available before attempting reconnect
+            # This handles the case where opencode was installed after startup
+            ok, msg = self.validate_opencode_available()
+            if not ok:
+                print(f"OpenCode reconnect skipped: {msg}")
+                self._emit_status(msg, connected=False)
+                delay = min(delay * 2, self.RECONNECT_MAX_DELAY)
+                continue
             async with self._connect_lock:
                 if self.is_connected() or not self._disconnected:
                     return
