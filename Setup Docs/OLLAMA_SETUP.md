@@ -62,7 +62,7 @@ OpenCode reads its config from two places:
 
 | Location | Path |
 | --- | --- |
-| Global (all projects) | `C:\Users\<you>\.config\opencode\opencode.json` on Windows, `~/.config/opencode/opencode.json` on Linux/macOS |
+| Global (all projects) | `C:\Users\<you>\.config\opencode\opencode.jsonc` on Windows, `~/.config/opencode/opencode.jsonc` on Linux/macOS |
 | Project (just this repo) | `opencode.json` in the project folder |
 
 Create or edit the file and add this block:

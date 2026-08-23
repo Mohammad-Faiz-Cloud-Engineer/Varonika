@@ -16,7 +16,8 @@ Varonika is a Python application, so Python must be on your PC first.
 
 ### Windows
 
-**Option A: winget (recommended — installs Python 3.12, creates venv, isolates Varonika)**
+#### Option A: winget (recommended; installs Python 3.12, creates venv, isolates Varonika)
+
 ```powershell
 winget install Python.Python.3.12
 # close and reopen terminal, then:
@@ -25,7 +26,8 @@ python -m venv .venv
 pip install -e .
 ```
 
-**Option B: Official installer**
+#### Option B: Windows official installer
+
 1. Open <https://www.python.org/downloads/>
 2. Click **Download Python** (3.11 or 3.12; not 3.13+).
 3. Run the installer. **Tick "Add Python to PATH"**.
@@ -33,16 +35,37 @@ pip install -e .
 
 ### macOS
 
+#### Option A: Homebrew (recommended)
+
+```bash
+brew install python@3.11
+# or for Python 3.12 (also works on macOS):
+brew install python@3.12
+```
+
+Then verify: `python3.11 --version` or `python3.12 --version`
+
+#### Option B: macOS official installer
+
+1. Open <https://www.python.org/downloads/macos/>
+2. Download the **macOS 64-bit universal2 installer** for Python 3.11 or 3.12.
+3. Run the installer.
+4. Verify: `python3.11 --version`
+
+> **Note:** On macOS, both Python 3.11 and 3.12 work. The `openwakeword` limitation only applies to Linux.
+
 ### Linux (Ubuntu / Debian)
 
 Use your package manager. Do not use the python.org installer.
 
 **Ubuntu 22.04 / 24.04 (and Debian-based):**
+
 ```bash
 sudo apt update && sudo apt install python3.11 python3.11-venv python3.11-dev
 ```
 
 If `python3.11` is not available in your repos, add the deadsnakes PPA (Ubuntu only):
+
 ```bash
 sudo add-apt-repository ppa:deadsnakes/ppa
 sudo apt update
@@ -50,16 +73,19 @@ sudo apt install python3.11 python3.11-venv python3.11-dev
 ```
 
 **Arch / Manjaro:**
+
 ```bash
 sudo pacman -S python3.11
 ```
 
 **Fedora:**
+
 ```bash
 sudo dnf install python3.11
 ```
 
 **Any Linux (using pyenv):**
+
 ```bash
 curl https://pyenv.run | bash
 # restart your shell, then:
@@ -73,11 +99,27 @@ pyenv global 3.11.9
 
 Open a terminal and run:
 
+**Windows:**
+
+```powershell
+python --version
+```
+
+**macOS (Homebrew):**
+
+```bash
+python3.11 --version
+# or
+python3.12 --version
+```
+
+**Linux:**
+
 ```bash
 python3.11 --version
 ```
 
-You should see something like `Python 3.11.x`. If the command is not found, close and reopen the terminal.
+You should see something like `Python 3.11.x` or `Python 3.12.x`. If the command is not found, close and reopen the terminal.
 
 ---
 
@@ -148,6 +190,8 @@ cd Varonika
 ```bash
 pip install -e .
 ```
+
+> **Note:** If you used the Windows winget + venv method (Step 1, Option A), you already ran this. Skip this step unless you're on macOS/Linux or used the official installer.
 
 This installs everything Varonika needs: the window interface, speech recognition, wake word, text to speech, and the OpenCode connection. It can take a few minutes; the AI libraries (especially torch) are big, so let it finish.
 

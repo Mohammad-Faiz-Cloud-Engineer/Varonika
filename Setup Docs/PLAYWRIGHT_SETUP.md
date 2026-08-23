@@ -33,7 +33,7 @@ OpenCode reads its config from two places:
 
 | Location | Path |
 | --- | --- |
-| Global (all projects) | `C:\Users\<you>\.config\opencode\opencode.json` on Windows, `~/.config/opencode/opencode.json` on Linux/macOS |
+| Global (all projects) | `C:\Users\<you>\.config\opencode\opencode.jsonc` on Windows, `~/.config/opencode/opencode.jsonc` on Linux/macOS |
 | Project (just this repo) | `opencode.json` in the project folder |
 
 If you use OpenCode with several projects, put it in the global file. If only this project needs browser control, put a project-level `opencode.json` instead. Both work, and the project one wins over the global one.

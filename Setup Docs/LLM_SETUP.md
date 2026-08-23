@@ -24,7 +24,7 @@ OpenCode reads its config from two places (the global one wins over nothing; the
 
 | Location | Path |
 | --- | --- |
-| Global (all projects) | `C:\Users\<you>\.config\opencode\opencode.jsonc` on Windows, `~/.config/opencode/opencode.json` on Linux/macOS |
+| Global (all projects) | `C:\Users\<you>\.config\opencode\opencode.jsonc` on Windows, `~/.config/opencode/opencode.jsonc` on Linux/macOS |
 | Project (just Varonika) | `opencode.json` in the Varonika folder |
 
 If you only use Varonika, put everything in the global file. If you share Varonika with other people, put a project-level `opencode.json` in the repo instead (without any API keys in it).
@@ -46,6 +46,16 @@ Pick one from the list and add it to your config file:
 ```
 
 Or set it with an environment variable (temporary, useful for testing):
+
+**Windows (if using venv):**
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+$env:OPENCODE_MODEL="ollama-cloud/gemma4:31b"
+python app/main.py
+```
+
+**macOS/Linux:**
 
 ```bash
 OPENCODE_MODEL=ollama-cloud/gemma4:31b python app/main.py
@@ -112,6 +122,15 @@ export MYPROVIDER_API_KEY=your-api-key     # Linux / macOS
 ## Step 2: verify
 
 Restart Varonika (close the window and run `python app/main.py` again). The **System** message in the window shows which model is in use. You can also confirm the model loads by running:
+
+**Windows (if using venv):**
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+opencode run "reply with exactly: OK"
+```
+
+**macOS/Linux:**
 
 ```bash
 opencode run "reply with exactly: OK"

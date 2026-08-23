@@ -26,7 +26,7 @@ The server talks to Chrome through the DevTools Protocol, the same thing the F12
 
 | Location | Path |
 | --- | --- |
-| Global (all projects) | `C:\Users\<you>\.config\opencode\opencode.json` on Windows, `~/.config/opencode/opencode.json` on Linux/macOS |
+| Global (all projects) | `C:\Users\<you>\.config\opencode\opencode.jsonc` on Windows, `~/.config/opencode/opencode.jsonc` on Linux/macOS |
 | Project (just this repo) | `opencode.json` in the project folder |
 
 Put it in the global file if you want browser testing everywhere, or the project file for just this repo.

@@ -70,7 +70,7 @@ OpenCode reads its config from two places:
 
 | Scope | Path |
 | --- | --- |
-| Global (all projects) | `C:\Users\<you>\.config\opencode\opencode.jsonc` on Windows, `~/.config/opencode/opencode.json` on Linux/macOS |
+| Global (all projects) | `C:\Users\<you>\.config\opencode\opencode.jsonc` on Windows, `~/.config/opencode/opencode.jsonc` on Linux/macOS |
 | Project (just Varonika) | `opencode.json` in the Varonika folder |
 
 If Varonika is the only OpenCode user on this PC, use the global file. If other people share the Varonika repo, put it in the project file instead.

@@ -63,7 +63,12 @@ Alternative: set two environment variables instead of the file: `GOOGLE_CLIENT_I
 
 ## Step 3: install the server
 
-**Windows:** download the pre-built Windows binary from the [releases page](https://github.com/ngs/google-mcp-server/releases). It is a single `.exe` file. Put it somewhere permanent like `C:\Tools\google-mcp-server.exe`.
+**Windows (choose one):**
+
+- **winget:** `winget install ngs.google-mcp-server`
+- **scoop:** `scoop bucket add ngs https://github.com/ngs/scoop-bucket && scoop install google-mcp-server`
+- **choco:** `choco install google-mcp-server`
+- **Manual:** download the pre-built Windows binary from the [releases page](https://github.com/ngs/google-mcp-server/releases). It is a single `.exe` file. Put it somewhere permanent like `C:\Tools\google-mcp-server.exe`.
 
 **macOS / Linux (Homebrew):**
 
@@ -91,22 +96,22 @@ A browser window opens, log in with your Google account, and click through the p
 
 ## Step 5: add it to OpenCode's config
 
-Create or edit `opencode.json` in the project folder (or `C:\Users\<you>\.config\opencode\opencode.json` for all projects) and add:
+Create or edit `opencode.jsonc` in the project folder (or `C:\Users\<you>\.config\opencode\opencode.jsonc` for all projects) and add:
 
-```json
+```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "google": {
       "type": "local",
-      "command": ["C:\\Tools\\google-mcp-server.exe"],
+      "command": ["google-mcp-server"],
       "enabled": true
     }
   }
 }
 ```
 
-On macOS/Linux the command is the binary path, for example `["/opt/homebrew/bin/google-mcp-server"]`.
+> **Note:** If you installed via winget/scoop/choco, the binary is on PATH so `google-mcp-server` works directly. If you downloaded manually, use the full path like `["C:\\Tools\\google-mcp-server.exe"]`. On macOS/Linux the command is the binary path, for example `["/opt/homebrew/bin/google-mcp-server"]`.
 
 ## Step 6: restart and verify
 
