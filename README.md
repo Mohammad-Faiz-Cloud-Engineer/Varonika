@@ -20,9 +20,17 @@ She can open apps, search the web, read files, run commands, and answer question
 
 ## Requirements
 
-- Windows, macOS, or Linux (Ubuntu)
-- Python 3.11 or 3.12 (Python 3.13+ is not currently supported due to underlying dependency constraints)
+- Windows, macOS, or Linux (Ubuntu/Debian/Arch/Fedora)
+- Python 3.11 or 3.12 (Python 3.12+ not supported on Linux due to `openwakeword`; 3.13+ unsupported on all platforms)
 - The `opencode` CLI installed and available on your PATH (this is the brain she talks to)
+
+### Windows: Quick install with winget
+```powershell
+winget install Python.Python.3.12
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e .
+```
 
 ### Install OpenCode first
 
@@ -46,7 +54,7 @@ pnpm install -g opencode-ai
 
 Once installed, configure which LLM OpenCode should use: a cloud provider, or a local model via [Ollama](Setup%20Docs/OLLAMA_SETUP.md) or [LM Studio](Setup%20Docs/LMStudio.md).
 
-> **Note for Linux Users:** On Linux (Ubuntu), Python 3.12 is currently not supported. This is because the `openwakeword` dependency requires `tflite-runtime` on Linux, which does not have pre-built wheels for Python 3.12. Please use Python 3.11 on Linux.
+> **Note for Linux Users:** On Linux, Python 3.12 is not supported because the `openwakeword` dependency requires `tflite-runtime`, which has no pre-built wheels for Python 3.12 on Linux. Use **Python 3.11**. Install it via your package manager (`apt install python3.11 python3.11-venv python3.11-dev` on Ubuntu/Debian) or pyenv, not from python.org.
 
 ## Setup
 

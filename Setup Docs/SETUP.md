@@ -14,20 +14,70 @@ At the end you say "Hey Varonika" and she answers you out loud.
 
 Varonika is a Python application, so Python must be on your PC first.
 
-1. Open the official Python website: <https://www.python.org/downloads/>
-2. Click the big **Download Python** button.
-3. Run the downloaded installer.
-4. **Important (Windows only):** on the first screen of the installer, tick the box that says **"Add Python to PATH"** before clicking *Install Now*. Without this, commands like `python` will not be found later.
-5. Install Python **3.11 or 3.12**. Do not use 3.13 or newer: Varonika's underlying libraries do not support it yet.
-6. Verify the installation. Open a terminal (Command Prompt on Windows, or Terminal on macOS/Linux) and run:
+### Windows
 
-```bash
-python --version
+**Option A: winget (recommended — installs Python 3.12, creates venv, isolates Varonika)**
+```powershell
+winget install Python.Python.3.12
+# close and reopen terminal, then:
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e .
 ```
 
-You should see something like `Python 3.12.x`. If the command is not found, close and reopen the terminal and check the PATH note above.
+**Option B: Official installer**
+1. Open <https://www.python.org/downloads/>
+2. Click **Download Python** (3.11 or 3.12; not 3.13+).
+3. Run the installer. **Tick "Add Python to PATH"**.
+4. Verify: `python --version`
 
-> **Linux users (Ubuntu):** use Python 3.11. Python 3.12 is not supported on Linux because one of Varonika's dependencies has no build for it there.
+### macOS
+
+### Linux (Ubuntu / Debian)
+
+Use your package manager. Do not use the python.org installer.
+
+**Ubuntu 22.04 / 24.04 (and Debian-based):**
+```bash
+sudo apt update && sudo apt install python3.11 python3.11-venv python3.11-dev
+```
+
+If `python3.11` is not available in your repos, add the deadsnakes PPA (Ubuntu only):
+```bash
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install python3.11 python3.11-venv python3.11-dev
+```
+
+**Arch / Manjaro:**
+```bash
+sudo pacman -S python3.11
+```
+
+**Fedora:**
+```bash
+sudo dnf install python3.11
+```
+
+**Any Linux (using pyenv):**
+```bash
+curl https://pyenv.run | bash
+# restart your shell, then:
+pyenv install 3.11.9
+pyenv global 3.11.9
+```
+
+> **Important:** On Linux, Python 3.12 is not supported because the `openwakeword` dependency lacks pre-built wheels for Python 3.12 on Linux. Use **Python 3.11**.
+
+### Verify
+
+Open a terminal and run:
+
+```bash
+python3.11 --version
+```
+
+You should see something like `Python 3.11.x`. If the command is not found, close and reopen the terminal.
 
 ---
 
