@@ -367,13 +367,22 @@ class MainWindow(QMainWindow):
         active list. Qt's append() copies the last block's format (including
         list membership), so text appended after a markdown bullet response
         would otherwise keep rendering as bullet points."""
+        from PySide6.QtGui import QColor, QTextCharFormat
         cursor = self.chat_view.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
-        if not cursor.atBlockStart():
-            cursor.insertBlock()
+        
         fmt = QTextBlockFormat()
         fmt.setObjectIndex(-1)
-        cursor.setBlockFormat(fmt)
+        
+        char_fmt = QTextCharFormat()
+        char_fmt.setForeground(QColor("#e0e0e0"))
+        
+        if not cursor.atBlockStart():
+            cursor.insertBlock(fmt, char_fmt)
+        else:
+            cursor.setBlockFormat(fmt)
+            cursor.setCharFormat(char_fmt)
+            
         cursor.insertHtml(html_text)
 
     def _on_ui_message(self, source, message):
@@ -383,9 +392,13 @@ class MainWindow(QMainWindow):
             # Streaming chunk: append to the stream block (not document end,
             # so System notes appended mid-stream are never polluted)
             if self._stream_start is None:
-                self._append_chat_block(
-                    '<span style="color:#4ec9b0; font-weight:bold;">Varonika:</span> '
-                )
+                if not getattr(self, '_is_turn_active', False):
+                    self._append_chat_block(
+                        '<span style="color:#4ec9b0; font-weight:bold;">Varonika:</span> '
+                    )
+                    self._is_turn_active = True
+                else:
+                    self._append_chat_block("")
                 cursor = self.chat_view.textCursor()
                 cursor.movePosition(QTextCursor.MoveOperation.End)
                 self._stream_start = cursor.position()
@@ -421,36 +434,56 @@ class MainWindow(QMainWindow):
             self._stream_end = None
             self._stream_text = ""
             self._stream_pending = ""
+            self._is_turn_active = False
         elif source == "Varonika":
-            # Final full response: replace the streamed text with rendered Markdown,
-            # or append the text if nothing was streamed
+            # Final full response: finalize the last stream block.
             if self._stream_start is not None:
+                if self._stream_pending:
+                    self._stream_text += self._stream_pending
+                    self._stream_pending = ""
                 cursor = self.chat_view.textCursor()
                 cursor.setPosition(self._stream_start)
                 cursor.setPosition(self._stream_end, QTextCursor.MoveMode.KeepAnchor)
                 cursor.removeSelectedText()
-                if message:
-                    cursor.insertFragment(self._markdown_fragment(message))
+                cursor.insertFragment(self._markdown_fragment(self._stream_text))
                 self._stream_start = None
                 self._stream_end = None
                 self._stream_text = ""
                 self._stream_pending = ""
-            elif message:
+            elif message and not getattr(self, '_is_turn_active', False):
                 self._append_chat_block(
                     '<span style="color:#4ec9b0; font-weight:bold;">Varonika:</span> '
                 )
                 cursor = self.chat_view.textCursor()
                 cursor.movePosition(QTextCursor.MoveOperation.End)
                 cursor.insertFragment(self._markdown_fragment(message))
+            self._is_turn_active = False
         elif source == "User":
             self._stream_start = None
             self._stream_end = None
             self._stream_text = ""
             self._stream_pending = ""
+            self._is_turn_active = False
             self._append_chat_block(
                 f'<span style="color:#569cd6; font-weight:bold;">You:</span> {html.escape(message)}'
             )
         elif source == "System":
+            if self._stream_start is not None:
+                # Flush the stream block before appending a system message.
+                # This breaks the stream so the system message appears chronologically
+                # AFTER the text that was streamed before it.
+                if self._stream_pending:
+                    self._stream_text += self._stream_pending
+                    self._stream_pending = ""
+                cursor = self.chat_view.textCursor()
+                cursor.setPosition(self._stream_start)
+                cursor.setPosition(self._stream_end, QTextCursor.MoveMode.KeepAnchor)
+                cursor.removeSelectedText()
+                cursor.insertFragment(self._markdown_fragment(self._stream_text))
+                self._stream_start = None
+                self._stream_end = None
+                self._stream_text = ""
+                self._stream_pending = ""
             self._append_chat_block(
                 f'<span style="color:#888;">{html.escape(message)}</span>'
             )
