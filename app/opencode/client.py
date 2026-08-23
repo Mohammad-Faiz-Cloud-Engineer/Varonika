@@ -240,15 +240,20 @@ class OpenCodeClient:
         import json
         proc = None
         try:
+            # _opencode_cmd is [exe, "acp"] for the live session. Spreading
+            # that here ran "opencode acp debug config": a second ACP
+            # process that hung on stdin, timed out, and made every
+            # connect report "no model is configured" even when one was.
+            exe = self._opencode_cmd[0]
             proc = await asyncio.create_subprocess_exec(
-                *self._opencode_cmd, "debug", "config",
+                exe, "debug", "config",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
             # A wedged opencode CLI must not stall startup (or the model line
-            # after a session reset) forever: give it 10 seconds, then kill
-            # it and report the model as unknown.
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+            # after a session reset) forever. Cold starts have been seen
+            # around 12s, so allow 30s, then kill it and report unknown.
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
             if proc.returncode == 0:
                 config = json.loads(stdout.decode('utf-8'))
                 self._model = config.get("model", "default")
@@ -454,8 +459,18 @@ class OpenCodeClient:
             await asyncio.sleep(self.HEARTBEAT_INTERVAL)
             if self._stopping or not self.is_connected():
                 continue
+            # A prompt holds the receive loop for a long time (tools, big
+            # answers). list_sessions in that window often hits PROBE_TIMEOUT
+            # even though the connection is fine, and the disconnect that
+            # followed used to kill the in-flight answer.
+            if self._prompt_lock.locked():
+                continue
+            epoch = self._epoch
             if not await self._probe():
-                await self._handle_disconnect("OpenCode heartbeat probe failed.")
+                # A prompt may have started while this probe was waiting.
+                if self._prompt_lock.locked() or epoch != self._epoch:
+                    continue
+                await self._handle_disconnect("OpenCode heartbeat probe failed.", epoch)
 
     async def _handle_disconnect(self, reason: str, epoch: int | None = None):
         """Idempotent teardown after a connection loss; schedules a reconnect.

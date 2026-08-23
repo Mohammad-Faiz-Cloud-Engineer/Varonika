@@ -165,6 +165,7 @@ class ConversationManager:
         """Enter listening mode from the hotkey: no follow-up timeout, waits as long as needed."""
         self._clear_follow_up()
         self.state.set_state(AppState.LISTENING)
+        self.stt.discard_calibration_progress()
         self.stt.reset()
 
     def _arm_follow_up(self):
@@ -373,10 +374,11 @@ class ConversationManager:
 
         # Wake word detection during idle/wakeword listening or speaking
         if current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING]:
-            if self.stt.is_calibrating:
-                # Calibration must consume real audio or it never completes:
-                # it runs only while she listens for the wake word.
-                self.stt.process_chunk(chunk)
+            # Room-noise only: never while she is talking (speaker bleed
+            # would raise the threshold and she would go deaf), and never
+            # while the user is being transcribed (that used to hijack STT).
+            # Wake word first: the trigger chunk (and the utterance that
+            # led to it) must not be treated as room noise.
             if self.wakeword.process_chunk(chunk):
                 print("Wake word detected!")
                 if current == AppState.SPEAKING:
@@ -388,8 +390,15 @@ class ConversationManager:
                 self.tts.speak(random.choice(["Yes Boss", "Yes Sir"]))
                 self.tts.signal_answer_end()
                 self.state.set_state(AppState.LISTENING)
+                self.stt.discard_calibration_progress()
                 self.stt.reset()
                 return
+            if (
+                self.stt.is_calibrating
+                and current == AppState.LISTENING_FOR_WAKEWORD
+                and not self.tts.is_speaking()
+            ):
+                self.stt.feed_calibration(chunk)
 
             # Answer finished: once she actually stops talking, open the
             # follow-up listening window. (She shows "Speaking" while the
