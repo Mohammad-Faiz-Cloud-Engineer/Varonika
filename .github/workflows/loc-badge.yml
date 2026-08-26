@@ -1,0 +1,39 @@
+name: Update Lines of Code Badge
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'app/**/*.py'
+      - 'scripts/**/*.py'
+
+permissions:
+  contents: write
+
+jobs:
+  update-badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Count Python lines
+        id: count
+        run: |
+          LINES=$(rg -c "." -g "*.py" | awk -F: '{sum += $2} END {print sum}')
+          echo "lines=$LINES" >> "$GITHUB_OUTPUT"
+
+      - name: Update badge JSON
+        run: |
+          echo '{"schemaVersion":1,"label":"lines of code","message":"${{ steps.count.outputs.lines }}","color":"green"}' > badges/lines-of-code.json
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add badges/lines-of-code.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update lines of code badge [skip ci]"
+            git push
+          fi

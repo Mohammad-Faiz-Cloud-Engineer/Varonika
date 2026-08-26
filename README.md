@@ -4,6 +4,7 @@
 ![Python Versions](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/github/license/Mohammad-Faiz-Cloud-Engineer/Varonika)
+![Lines of code](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Mohammad-Faiz-Cloud-Engineer/Varonika/main/badges/lines-of-code.json)
 
 Varonika is a hands-free voice assistant for your PC. Say "Hey Varonika" and she listens, asks OpenCode to do the work, and speaks the answer back.
 
