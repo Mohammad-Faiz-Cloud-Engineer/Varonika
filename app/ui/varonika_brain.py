@@ -10,7 +10,7 @@ from app.conversation.state import AppState
 # Corner radius of the brain card, matching the right panel.
 CORNER_RADIUS = 16
 
-class UltronBrain(QWidget):
+class VaronikaBrain(QWidget):
     def __init__(self):
         super().__init__()
         self.setMinimumSize(300, 400)

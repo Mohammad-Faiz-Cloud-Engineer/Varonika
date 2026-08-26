@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 from app.config.settings import save_config_field
 from app.conversation.state import AppState
 from app.formatting import latex_to_text
-from app.ui.ultron_brain import UltronBrain
+from app.ui.varonika_brain import VaronikaBrain
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
@@ -73,7 +73,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         # Left panel (Brain)
-        self.brain = UltronBrain()
+        self.brain = VaronikaBrain()
         layout.addWidget(self.brain, stretch=1)
 
         # Right panel (Chat & Status)
