@@ -1,5 +1,6 @@
-from enum import Enum, auto
 import threading
+from enum import Enum, auto
+
 
 class AppState(Enum):
     IDLE = auto()

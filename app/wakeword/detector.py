@@ -4,8 +4,8 @@ import time
 import urllib.request
 
 import numpy as np
-import openwakeword
 from openwakeword.model import Model
+import contextlib
 
 WAKEWORD_RESOURCE_URLS = {
     "melspectrogram.onnx": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx",
@@ -48,10 +48,8 @@ def _ensure_resource(name):
             print(f"Error downloading {name} (attempt {attempt}/{_MAX_ATTEMPTS}): {e}")
         finally:
             if os.path.exists(part):
-                try:
+                with contextlib.suppress(OSError):
                     os.remove(part)
-                except OSError:
-                    pass
         if attempt < _MAX_ATTEMPTS:
             time.sleep(2)
     return None
@@ -85,7 +83,7 @@ class WakeWordDetector:
             print(f"Error loading wake word model: {e}")
             return None, None
 
-        
+
     def process_chunk(self, audio_chunk: np.ndarray) -> bool:
         """
         Process a chunk of audio (expected 16khz, int16)

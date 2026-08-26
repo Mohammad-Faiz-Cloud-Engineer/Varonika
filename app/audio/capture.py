@@ -1,8 +1,11 @@
-import pyaudio
-import numpy as np
 import queue
 import threading
 import time
+
+import numpy as np
+import pyaudio
+import contextlib
+
 
 class AudioCapture:
     def __init__(self, sample_rate=16000, chunk_size=1280, device_name=""): # 1280 is ~80ms at 16khz
@@ -14,7 +17,7 @@ class AudioCapture:
         self.is_listening = False
         self.callbacks = []
         self.active_device = self._default_device_name()
-        
+
         self.queue = queue.Queue(maxsize=50)
         self.worker_thread = None
         self._stop_event = threading.Event()
@@ -136,7 +139,7 @@ class AudioCapture:
             if key not in seen or (is_modern and not seen[key][2]):
                 seen[key] = (i, name, is_modern)
         full_by_prefix = {}
-        for i, name, _ in seen.values():
+        for _i, name, _ in seen.values():
             if len(name) > 31:
                 full_by_prefix.setdefault(self._dedupe_key(name), True)
         result = []
@@ -224,14 +227,10 @@ class AudioCapture:
                     # Drop the oldest chunk so the queue stays real-time. Keeping
                     # the newest frame matters more for wake word and end-of-speech
                     # than preserving a backlog that is already several seconds late.
-                    try:
+                    with contextlib.suppress(queue.Empty):
                         self.queue.get_nowait()
-                    except queue.Empty:
-                        pass
-                    try:
+                    with contextlib.suppress(queue.Full):
                         self.queue.put_nowait(audio_np)
-                    except queue.Full:
-                        pass
         except Exception:
             # An unhandled exception here silently kills the PortAudio stream
             # with no way to recover. Always return a valid tuple so the
@@ -245,7 +244,7 @@ class AudioCapture:
                 audio_np = self.queue.get(timeout=0.1)
                 if audio_np is None:
                     break
-                
+
                 # We snapshot callbacks to be safe, though they are usually static
                 cbs = list(self.callbacks)
                 for cb in cbs:
@@ -264,7 +263,7 @@ class AudioCapture:
 
         self._stop_event = threading.Event()
         self.is_listening = True
-        
+
         # Start background worker thread
         if self.worker_thread is None or not self.worker_thread.is_alive():
             self.worker_thread = threading.Thread(target=self._worker_loop, args=(self._stop_event,), daemon=True)
@@ -352,20 +351,18 @@ class AudioCapture:
                 self.stream.stop_stream()
                 self.stream.close()
                 self.stream = None
-            
+
         self._stop_event.set()
         # Always send the sentinel before joining so the worker exits
         # promptly regardless of whether it is blocked on queue.get().
-        try:
+        with contextlib.suppress(queue.Full):
             self.queue.put_nowait(None)
-        except queue.Full:
-            pass
         if self.worker_thread and self.worker_thread.is_alive():
             self.worker_thread.join(timeout=1.0)
             if self.worker_thread.is_alive():
                 print("Warning: Audio worker thread did not terminate.")
             self.worker_thread = None
-            
+
         # Clear any remaining items in queue
         while True:
             try:

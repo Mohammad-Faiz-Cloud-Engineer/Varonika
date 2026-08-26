@@ -3,17 +3,29 @@ import inspect
 import os
 from pathlib import Path
 from typing import Any
-from app.config.settings import BASE_DIR
+
 from acp import RequestError, spawn_agent_process
 from acp.schema import (
-    AgentMessageChunk, ToolCallStart, ToolCallProgress,
-    PermissionOption, AllowedOutcome, DeniedOutcome, RequestPermissionResponse,
+    AgentMessageChunk,
+    AllowedOutcome,
+    CreateTerminalResponse,
+    DeniedOutcome,
+    KillTerminalResponse,
+    PermissionOption,
     ReadTextFileResponse,
-    CreateTerminalResponse, TerminalOutputResponse,
-    ReleaseTerminalResponse, WaitForTerminalExitResponse,
-    KillTerminalResponse, WriteTextFileResponse,
-    TextContentBlock, ToolCallUpdate,
+    ReleaseTerminalResponse,
+    RequestPermissionResponse,
+    TerminalOutputResponse,
+    TextContentBlock,
+    ToolCallProgress,
+    ToolCallStart,
+    ToolCallUpdate,
+    WaitForTerminalExitResponse,
+    WriteTextFileResponse,
 )
+
+from app.config.settings import BASE_DIR
+import contextlib
 
 
 class VaronikaClient:
@@ -55,16 +67,15 @@ class VaronikaClient:
                     raw_input=update.raw_input,
                 )
 
-        elif isinstance(update, ToolCallProgress):
-            if self.on_tool_update:
-                self.on_tool_update(
-                    update.tool_call_id,
-                    title=update.title,
-                    kind=update.kind,
-                    raw_input=update.raw_input,
-                    locations=update.locations,
-                    status=update.status,
-                )
+        elif isinstance(update, ToolCallProgress) and self.on_tool_update:
+            self.on_tool_update(
+                update.tool_call_id,
+                title=update.title,
+                kind=update.kind,
+                raw_input=update.raw_input,
+                locations=update.locations,
+                status=update.status,
+            )
 
     async def request_permission(
         self, options: list[PermissionOption], session_id: str, tool_call: ToolCallUpdate, **kwargs: Any
@@ -96,7 +107,7 @@ class VaronikaClient:
         """Read a file slice. ACP `line` is 1-based; `limit` is a line count, not bytes."""
         try:
             start = line if (line is not None and line > 0) else 1
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
+            with open(path, encoding="utf-8", errors="replace") as f:
                 if start == 1 and limit is None:
                     content = f.read()
                 else:
@@ -121,7 +132,7 @@ class VaronikaClient:
                 f.write(content)
             return WriteTextFileResponse()
         except Exception as e:
-            raise Exception(f"Failed to write file: {e}")
+            raise Exception(f"Failed to write file: {e}") from e
 
     async def create_terminal(self, command: str, session_id: str, **kwargs: Any) -> CreateTerminalResponse:
         # Terminals are not supported: tell the agent with a proper JSON-RPC
@@ -386,10 +397,8 @@ class OpenCodeClient:
         except Exception:
             # Never leave a half-started process behind after a failed start.
             if cm is not None:
-                try:
+                with contextlib.suppress(Exception):
                     await asyncio.wait_for(cm.__aexit__(None, None, None), timeout=5)
-                except Exception:
-                    pass
             raise
         self._cm = cm
         self._process = process
@@ -534,24 +543,22 @@ class OpenCodeClient:
                 raise RuntimeError("OpenCode not connected")
             # Try to close old session gracefully if possible
             if self.session_id:
-                try:
+                with contextlib.suppress(Exception):
                     await asyncio.wait_for(
                         self.connection.close_session(session_id=self.session_id),
                         timeout=self.PROBE_TIMEOUT,
                     )
-                except Exception:
-                    pass
 
             try:
                 resp = await asyncio.wait_for(
                     self.connection.new_session(cwd=cwd),
                     timeout=self.CONNECT_TIMEOUT,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # The session request never came back: the connection is
                 # wedged. Reset it; the next prompt reconnects automatically.
                 await self._handle_disconnect("OpenCode did not respond in time.")
-                raise RuntimeError("OpenCode did not respond in time; the connection was reset.")
+                raise RuntimeError("OpenCode did not respond in time; the connection was reset.") from None
             self.session_id = resp.session_id
             self.varonika_client.session_id = self.session_id
         model = await self.get_current_model()
@@ -584,12 +591,12 @@ class OpenCodeClient:
                     timeout=self.PROMPT_TIMEOUT,
                 )
                 return self.varonika_client._accumulated_text
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # The agent stopped answering (dead receive loop, wedged
                 # process). Never leave the caller waiting forever: reset
                 # the connection; the next prompt reconnects automatically.
                 await self._handle_disconnect("OpenCode did not respond in time.")
-                raise RuntimeError("OpenCode did not respond in time; the connection was reset.")
+                raise RuntimeError("OpenCode did not respond in time; the connection was reset.") from None
             except Exception as e:
                 if not await self._probe():
                     await self._handle_disconnect(f"OpenCode request failed: {e}")
@@ -606,7 +613,7 @@ class OpenCodeClient:
                 self.connection.list_sessions(),
                 timeout=self.PROBE_TIMEOUT,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return False
         except Exception:
             pass  # an error response still means the loop answered
@@ -614,18 +621,14 @@ class OpenCodeClient:
 
     def _emit_status(self, message: str, connected: bool):
         if self.on_status_change:
-            try:
+            with contextlib.suppress(Exception):
                 self.on_status_change(message, connected)
-            except Exception:
-                pass
 
     async def cancel(self):
         """Cancel the current request (best effort; a notification, not a request)."""
         if self.connection and self.session_id and not self._disconnected:
-            try:
+            with contextlib.suppress(Exception):
                 await self.connection.cancel(session_id=self.session_id)
-            except Exception:
-                pass
 
     async def stop(self):
         self._stopping = True
@@ -656,7 +659,5 @@ class OpenCodeClient:
         self._cm = None
         self._process = None
         if cm is not None:
-            try:
+            with contextlib.suppress(Exception):
                 await asyncio.wait_for(cm.__aexit__(None, None, None), timeout=5)
-            except Exception:
-                pass

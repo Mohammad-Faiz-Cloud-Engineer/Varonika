@@ -2,17 +2,35 @@ import html
 import threading
 import time
 from pathlib import Path
-from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QTextEdit, QLabel, QSystemTrayIcon, QMenu, QApplication, QComboBox, QSlider
-)
-from PySide6.QtCore import Signal, QSignalBlocker, Qt
-from PySide6.QtGui import QAction, QIcon, QTextCursor, QTextDocument, QTextDocumentFragment, QTextBlockFormat
+
 import qasync
-from app.ui.ultron_brain import UltronBrain
-from app.conversation.state import AppState
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from PySide6.QtGui import (
+    QAction,
+    QIcon,
+    QTextBlockFormat,
+    QTextCursor,
+    QTextDocument,
+    QTextDocumentFragment,
+)
+from PySide6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMenu,
+    QSlider,
+    QSystemTrayIcon,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
 from app.config.settings import save_config_field
+from app.conversation.state import AppState
 from app.formatting import latex_to_text
+from app.ui.ultron_brain import UltronBrain
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
@@ -292,8 +310,7 @@ class MainWindow(QMainWindow):
         device, or the requested device before the stream has opened."""
         active = self._display_device()
         combo_idx = self.mic_combo.findData(active)
-        if combo_idx < 0:
-            combo_idx = 0  # "System Default"
+        combo_idx = max(combo_idx, 0)  # "System Default"
         with QSignalBlocker(self.mic_combo):
             self.mic_combo.setCurrentIndex(combo_idx)
 
@@ -312,7 +329,7 @@ class MainWindow(QMainWindow):
             self.mic_combo.clear()
             self.mic_combo.addItem("System Default", "")
             key = self.manager.audio._dedupe_key
-            for idx, name in devices:
+            for _idx, name in devices:
                 label = name + ("  (Default)" if default_name is not None and key(name) == key(default_name) else "")
                 self.mic_combo.addItem(label, name)
         self.sync_mic_combo()
@@ -353,7 +370,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Volume save failed: {e}")
 
-    def _thread_safe_state(self, old_state, new_state):
+    def _thread_safe_state(self, _old_state, new_state):
         self.state_signal.emit(new_state)
 
     def _markdown_fragment(self, text):
@@ -370,19 +387,19 @@ class MainWindow(QMainWindow):
         from PySide6.QtGui import QColor, QTextCharFormat
         cursor = self.chat_view.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
-        
+
         fmt = QTextBlockFormat()
         fmt.setObjectIndex(-1)
-        
+
         char_fmt = QTextCharFormat()
         char_fmt.setForeground(QColor("#e0e0e0"))
-        
+
         if not cursor.atBlockStart():
             cursor.insertBlock(fmt, char_fmt)
         else:
             cursor.setBlockFormat(fmt)
             cursor.setCharFormat(char_fmt)
-            
+
         cursor.insertHtml(html_text)
 
     def _on_ui_message(self, source, message):

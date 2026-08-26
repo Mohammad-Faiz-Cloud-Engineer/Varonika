@@ -1,9 +1,10 @@
-import urllib.request
+import os
 import shutil
 import sys
-import os
 import tempfile
+import urllib.request
 from pathlib import Path
+import contextlib
 
 WAKEWORD_RESOURCE_URLS = {
     "melspectrogram.onnx": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx",
@@ -18,16 +19,14 @@ def download_file(url, destination):
     # A previously killed download (app closed mid-startup) leaves an orphan
     # .part behind; clean those up so they cannot accumulate on disk.
     for stale in destination.parent.glob(f".{destination.name}.*.part"):
-        try:
+        with contextlib.suppress(OSError):
             stale.unlink()
-        except OSError:
-            pass
     fd, temp_path = tempfile.mkstemp(
         prefix=f".{destination.name}.", suffix=".part", dir=destination.parent
     )
     os.close(fd)
     temp_path = Path(temp_path)
-    
+
     try:
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -64,7 +63,7 @@ def main():
     base_dir = Path(__file__).parent.parent
     models_dir = base_dir / "models"
     models_dir.mkdir(exist_ok=True)
-    
+
     # Download Whisper Model
     whisper_model = models_dir / "ggml-small.en.bin"
     if not _usable(whisper_model):

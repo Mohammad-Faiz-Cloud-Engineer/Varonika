@@ -1,8 +1,10 @@
 import math
 import random
+
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
+from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
-from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath
-from PySide6.QtCore import QTimer, Qt, QPointF, QRectF
+
 from app.conversation.state import AppState
 
 # Corner radius of the brain card, matching the right panel.
@@ -33,7 +35,7 @@ class UltronBrain(QWidget):
         super().hideEvent(event)
         self.timer.stop()
 
-    def paintEvent(self, event):
+    def paintEvent(self, _event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
@@ -45,12 +47,12 @@ class UltronBrain(QWidget):
         painter.fillRect(self.rect(), QColor(10, 10, 15))
 
         self.time += 0.05
-        
+
         # Determine colors and activity based on state
         color = QColor(0, 150, 255) # Default blue
         pulse_speed = 1.0
         line_thickness = 1
-        
+
         if self.state == AppState.LISTENING_FOR_WAKEWORD:
             color = QColor(0, 100, 200, 100)
             pulse_speed = 0.5
@@ -72,7 +74,7 @@ class UltronBrain(QWidget):
         elif self.state == AppState.ERROR:
             color = QColor(255, 0, 0)
             pulse_speed = 0.5
-        
+
         w, h = self.width(), self.height()
         center_x, center_y = w / 2, h / 2
 
@@ -80,7 +82,7 @@ class UltronBrain(QWidget):
         pen = QPen(color)
         pen.setWidth(line_thickness)
         painter.setPen(pen)
-        
+
         # Dynamic node positions
         active_nodes = []
         for nx, ny in self.nodes:
@@ -102,7 +104,7 @@ class UltronBrain(QWidget):
                     c.setAlpha(alpha)
                     painter.setPen(QPen(c, line_thickness))
                     painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
-        
+
         # Draw central orb
         radius = 30 + math.sin(self.time * pulse_speed) * 10
         orb_color = QColor(color)

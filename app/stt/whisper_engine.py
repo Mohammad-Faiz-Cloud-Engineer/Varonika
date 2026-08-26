@@ -1,9 +1,11 @@
-import numpy as np
-from pywhispercpp.model import Model
 import os
 import re
-import time
 import threading
+import time
+
+import numpy as np
+from pywhispercpp.model import Model
+
 
 class STTEngine:
     # Hard cap so a long rant (or a stuck "speech" energy floor) cannot grow
@@ -61,7 +63,7 @@ class STTEngine:
         self.calibration_buffer = []
         self.calibration_chunks_needed = 0
 
-    def start_calibration(self, duration_sec: float = 2.0, chunk_size: int = 1280, sample_rate: int = 16000):
+    def start_calibration(self, duration_sec: float = 2.0, chunk_size: int = 1280, _sample_rate: int = 16000):
         """Starts collecting audio chunks to establish a dynamic noise floor."""
         print(f"Calibrating noise floor for {duration_sec}s...")
         self.is_calibrating = True
@@ -159,10 +161,7 @@ class STTEngine:
 
             # Inference under the transcribe lock only: the audio buffer lock
             # is released so process_chunk can keep feeding new audio.
-            if self.model is None:
-                segments = []
-            else:
-                segments = self.model.transcribe(full_audio)
+            segments = [] if self.model is None else self.model.transcribe(full_audio)
 
             with self._lock:
                 if my_gen != self._transcribe_gen:

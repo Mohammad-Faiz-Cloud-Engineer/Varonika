@@ -1,5 +1,7 @@
 import keyboard
+
 from app.conversation.state import AppState
+
 
 class HotkeyListener:
     def __init__(self, manager, activate_key="alt+space"):

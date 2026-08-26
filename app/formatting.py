@@ -1,11 +1,11 @@
 """Convert LaTeX math into plain readable text.
 
 Qt's markdown renderer does not understand LaTeX, and the speech
-formatter does not either, so math like $\tau = r F \sin(\theta)$ would
+formatter does not either, so math like $\tau = r F \\sin(\theta)$ would
 otherwise appear raw in the chat and be read out loud as "dollar tau
 equals..." This module rewrites the most common LaTeX math into ordinary
 text: Greek letters become their Unicode symbols, \frac{a}{b} becomes
-(a)/(b), \sqrt{x} becomes \u221ax, superscripts and subscripts become their
+(a)/(b), \\sqrt{x} becomes \u221ax, superscripts and subscripts become their
 Unicode forms, and any remaining commands keep their letters with the
 backslash removed.
 """
@@ -76,17 +76,17 @@ def _take_group(s, i):
 def _super(arg):
     if all(ch in _SUPER_MAP for ch in arg):
         return "".join(_SUPER_MAP[ch] for ch in arg)
-    return "^({})".format(arg)
+    return f"^({arg})"
 
 
 def _sub(arg):
     if all(ch in _SUB_MAP for ch in arg):
         return "".join(_SUB_MAP[ch] for ch in arg)
-    return "_({})".format(arg)
+    return f"_({arg})"
 
 
 def _maybe_paren(arg):
-    return arg if len(arg) <= 1 else "({})".format(arg)
+    return arg if len(arg) <= 1 else f"({arg})"
 
 
 def _convert_math(s):
@@ -108,8 +108,7 @@ def _convert_math(s):
                         j = _skip_ws(s, j)
                         if j < n and s[j] == "{":
                             den, j = _take_group(s, j)
-                            out.append("({})/({})".format(
-                                _convert_math(num), _convert_math(den)))
+                            out.append(f"({_convert_math(num)})/({_convert_math(den)})")
                             i = j
                             continue
                         out.append(_convert_math(num))
@@ -255,9 +254,9 @@ def latex_to_text(text: str) -> str:
             out.append(line)
             continue
         line = re.sub(r"\\\[\s*(.*?)\s*\\\]",
-                      lambda m: _convert_math(m.group(1)), line, flags=re.S)
+                      lambda m: _convert_math(m.group(1)), line, flags=re.DOTALL)
         line = re.sub(r"\\\(\s*(.*?)\s*\\\)",
-                      lambda m: _convert_math(m.group(1)), line, flags=re.S)
+                      lambda m: _convert_math(m.group(1)), line, flags=re.DOTALL)
         out.append(line)
     text = "\n".join(out)
 

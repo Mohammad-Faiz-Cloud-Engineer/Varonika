@@ -1,8 +1,8 @@
-import time
-import queue
-import threading
 import collections
 import os
+import queue
+import threading
+import time
 
 import numpy as np
 import sounddevice as sd
@@ -14,9 +14,11 @@ from scipy.signal import resample_poly
 # Kokoro is a small model: four threads stay well above real time.
 os.environ.setdefault("OMP_NUM_THREADS", "4")
 import torch
+
 torch.set_num_threads(4)
 
 from kokoro import KPipeline
+import contextlib
 
 SAMPLE_RATE = 24000
 # Small blocks keep writes real-time paced: an interrupt is honored within
@@ -39,7 +41,8 @@ MAX_BUFFERED_SECONDS = 60.0
 
 def _compress_silences(audio: np.ndarray) -> np.ndarray:
     """Shorten silence runs longer than 100 ms to 40 ms, keep the rest."""
-    if len(audio) == 0: return audio
+    if len(audio) == 0:
+        return audio
     silent = np.abs(audio) < SILENCE_THRESHOLD
     edges = np.flatnonzero(np.diff(silent.astype(np.int8)))
     starts = np.concatenate(([0], edges + 1))
@@ -47,7 +50,7 @@ def _compress_silences(audio: np.ndarray) -> np.ndarray:
     max_silence = int(SILENCE_MAX * SAMPLE_RATE)
     min_trim = int(SILENCE_MIN_TRIM * SAMPLE_RATE)
     parts = []
-    for s, e in zip(starts, ends):
+    for s, e in zip(starts, ends, strict=False):
         if silent[s] and (e - s) > min_trim:
             parts.append(audio[s : s + max_silence])
         else:
@@ -175,7 +178,7 @@ class TTSEngine:
         self._stream = None
         self._stream_lock = threading.Lock()
 
-    def _audio_callback(self, outdata, frames, time_info, status):
+    def _audio_callback(self, outdata, frames, _time_info, _status):
         """Called by the audio driver with a hard deadline. Never blocks,
         never allocates: pulls finished samples out of the playback buffer
         and zero-fills if it runs dry (a silent beat instead of a stutter)."""
@@ -224,11 +227,11 @@ class TTSEngine:
         """
         with self._stream_lock:
             if self._stream is None:
-                kwargs = dict(
-                    samplerate=self._out_rate, channels=1, dtype="float32",
-                    blocksize=BLOCK_SIZE, callback=self._audio_callback,
-                    latency=0.2,
-                )
+                kwargs = {
+                    "samplerate": self._out_rate, "channels": 1, "dtype": "float32",
+                    "blocksize": BLOCK_SIZE, "callback": self._audio_callback,
+                    "latency": 0.2,
+                }
                 if self._out_device is not None:
                     kwargs["device"] = self._out_device
                     kwargs["extra_settings"] = sd.WasapiSettings(exclusive=False)
@@ -241,10 +244,8 @@ class TTSEngine:
                         return self._stream
                     except Exception as e:
                         last_error = e
-                        try:
+                        with contextlib.suppress(Exception):
                             s.close()
-                        except Exception:
-                            pass
                         time.sleep(0.15 * (attempt + 1))
                 # WASAPI is wedged (BT stack settling, device state): fall
                 # back to the PortAudio default device at 24 kHz so speech
@@ -265,10 +266,8 @@ class TTSEngine:
                     print("TTS output: fell back to default device (MME) at 24 kHz")
                     return self._stream
                 except Exception as e2:
-                    try:
+                    with contextlib.suppress(Exception):
                         s.close()
-                    except Exception:
-                        pass
                     print(f"TTS output unavailable: {last_error} / fallback: {e2}")
                     return None
             return self._stream
@@ -276,14 +275,10 @@ class TTSEngine:
     def _close_stream(self):
         with self._stream_lock:
             if self._stream is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self._stream.abort()
-                except Exception:
-                    pass
-                try:
+                with contextlib.suppress(Exception):
                     self._stream.close()
-                except Exception:
-                    pass
                 self._stream = None
 
     def start_worker(self):

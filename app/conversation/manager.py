@@ -1,16 +1,18 @@
 import asyncio
+import random
 import re
 import threading
 import time
-import random
-from app.conversation.state import StateManager, AppState
+
 from app.audio.capture import AudioCapture
-from app.wakeword.detector import WakeWordDetector
+from app.config.settings import Config, save_config_field
+from app.conversation.state import AppState, StateManager
+from app.formatting import latex_to_text
+from app.opencode.client import OpenCodeClient
 from app.stt.whisper_engine import STTEngine
 from app.tts.kokoro_engine import TTSEngine
-from app.opencode.client import OpenCodeClient
-from app.config.settings import Config, save_config_field
-from app.formatting import latex_to_text
+from app.wakeword.detector import WakeWordDetector
+import contextlib
 
 
 class ConversationManager:
@@ -70,7 +72,7 @@ class ConversationManager:
         # _return_after_interrupt would yank the new request to LISTENING,
         # silently dropping its answer.
         self._request_seq = 0
-        
+
         self._stream_lock = threading.Lock()
 
         # Post-answer follow-up window: after she answers she keeps listening
@@ -94,10 +96,10 @@ class ConversationManager:
         # One stream feeds both consumers: the wake word and the STT can
         # never hear different microphones.
         print(f"Wake word and STT listening on: {self.audio.active_device}")
-        
+
         # Start dynamic noise floor calibration (e.g. 2 seconds)
         self.stt.start_calibration(duration_sec=2.0)
-        
+
         self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
         if self.stt.model is None:
             self._emit_ui(
@@ -219,10 +221,10 @@ class ConversationManager:
             return
         if self.state.current not in [AppState.THINKING, AppState.EXECUTING_TOOL, AppState.SPEAKING]:
             return
-            
+
         if self.state.current in [AppState.THINKING, AppState.EXECUTING_TOOL]:
             self.state.set_state(AppState.SPEAKING)
-            
+
         with self._stream_lock:
             self._stream_buffer += chunk
             self._emit_ui("Varonika_stream", chunk)
@@ -260,7 +262,7 @@ class ConversationManager:
             # to ensure the chunks are large enough. We preserve newlines so Kokoro
             # can use them for pacing.
             sentences = re.split(r'(?<=[.!?])[ \t]+|(?<=\n)', safe_text)
-                
+
             if len(sentences) > 1:
                 # Combine tiny fragments (like short bullet points) into
                 # larger chunks. Every chunk pays a fixed synthesis tax
@@ -274,7 +276,7 @@ class ConversationManager:
                     if len(current.strip()) >= 150:
                         combined.append(current.strip())
                         current = ""
-                        
+
                 # If there's leftover combined text, it's a complete parsed
                 # clause: flush it as a chunk even if it's below the
                 # threshold (the LLM's next sentence may be slow to arrive).
@@ -293,7 +295,7 @@ class ConversationManager:
                         if not live or self.opencode.stream_seq != self._request_seq:
                             return
                         self.tts.speak(clean.strip())
-                        
+
                 self._stream_buffer = sentences[-1] + unsafe_text
             else:
                 self._stream_buffer = safe_text + unsafe_text
@@ -460,7 +462,7 @@ class ConversationManager:
             text = self.stt.transcribe()
             if text is None:
                 return  # transcription was invalidated (e.g. hotkey re-activation)
-            
+
             # Remove Whisper noise/silence hallucinations like [BLANK_AUDIO] or (wind blowing).
             # Only strip Whisper-style brackets, not all parenthesized text
             # (which would remove legitimate content like "The quick (brown) fox").
@@ -469,7 +471,7 @@ class ConversationManager:
             text = re.sub(r'\[(?:[A-Z][A-Z_]+|\.[\.\s]*)\]', '', text)
             # Parenthetical tags: common Whisper hallucination phrases.
             text = re.sub(r'\((?:BLANK_AUDIO|CROSSTALK|silence|wind|music|sigh|laughs|applause|cheering)\)', '', text, flags=re.IGNORECASE)
-            
+
             text = self._WAKE_PHRASE_RE.sub("", text, count=1).strip()
             if not text:
                 self._clear_follow_up()
@@ -537,7 +539,7 @@ class ConversationManager:
                 self._clear_follow_up()
                 self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
                 return
-            
+
         # Check for context reset commands
         if self._RESET_SESSION_RE.match(text):
             self._emit_ui("System", "Resetting OpenCode context...")
@@ -685,7 +687,5 @@ class ConversationManager:
         self.tts.stop()
         if self.hotkeys:
             self.hotkeys.stop()
-        try:
+        with contextlib.suppress(Exception):
             await asyncio.wait_for(self.opencode.stop(), timeout=1.0)
-        except Exception:
-            pass

@@ -1,18 +1,19 @@
-import sys
 import asyncio
 import os
 import subprocess
-from PySide6.QtWidgets import QApplication
+import sys
+
 import qasync
+from PySide6.QtWidgets import QApplication
 
 # Ensure 'app' package is importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.config.settings import load_config
-from app.conversation.state import StateManager
 from app.conversation.manager import ConversationManager
-from app.ui.main_window import MainWindow, load_app_icon
+from app.conversation.state import StateManager
 from app.hotkeys.listener import HotkeyListener
+from app.ui.main_window import MainWindow, load_app_icon
 
 
 def check_models():
@@ -84,8 +85,8 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        import traceback
         import sys
+        import traceback
         print(f"Fatal crash: {e}", file=sys.stderr)
         traceback.print_exc()
         sys.exit(1)

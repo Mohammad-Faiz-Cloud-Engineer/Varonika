@@ -1,8 +1,10 @@
 import os
-import yaml
 import tempfile
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
+import contextlib
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -47,7 +49,7 @@ def save_config_field(key: str, value) -> bool:
     try:
         data = {}
         if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding="utf-8") as f:
                 loaded = yaml.safe_load(f)
                 # A hand-edited config containing a scalar or a list (e.g.
                 # just a stray number) must not crash the app: ignore it.
@@ -66,10 +68,8 @@ def save_config_field(key: str, value) -> bool:
             os.replace(temp_path, config_path)
         except Exception:
             # Clean up the temp file on failure
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(temp_path)
-            except OSError:
-                pass
             raise
         return True
     except (OSError, yaml.YAMLError) as e:
@@ -81,7 +81,7 @@ def load_config() -> Config:
     c = Config()
     try:
         if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding="utf-8") as f:
                 loaded = yaml.safe_load(f)
                 # A hand-edited config containing a scalar or a list (e.g.
                 # just a stray number) must not crash the app: ignore it.
