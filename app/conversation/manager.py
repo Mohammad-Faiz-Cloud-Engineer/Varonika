@@ -466,11 +466,11 @@ class ConversationManager:
             # Remove Whisper noise/silence hallucinations like [BLANK_AUDIO] or (wind blowing).
             # Only strip Whisper-style brackets, not all parenthesized text
             # (which would remove legitimate content like "The quick (brown) fox").
-            # Bracket tags: all-caps words (BLANK_AUDIO, SOUND, MUSIC, etc.)
-            # and dot/ellipsis patterns ([...], [. .]).
-            text = re.sub(r'\[(?:[A-Z][A-Z_]+|\.[\.\s]*)\]', '', text)
+            # Bracket tags: typical sound tags (BLANK_AUDIO, SOUND, MUSIC, whistling, etc.)
+            # and dot/ellipsis patterns ([...], [. .]). We match any letters/spaces inside.
+            text = re.sub(r'\[(?:[a-zA-Z_ -]+|\.[\.\s]*)\]', '', text)
             # Parenthetical tags: common Whisper hallucination phrases.
-            text = re.sub(r'\((?:BLANK_AUDIO|CROSSTALK|silence|wind|music|sigh|laughs|applause|cheering)\)', '', text, flags=re.IGNORECASE)
+            text = re.sub(r'\((?:BLANK_AUDIO|CROSSTALK|silence|wind|music|sigh|laughs|applause|cheering|whistling|breathing|coughs|throat clearing)\)', '', text, flags=re.IGNORECASE)
 
             text = self._WAKE_PHRASE_RE.sub("", text, count=1).strip()
             if not text:
