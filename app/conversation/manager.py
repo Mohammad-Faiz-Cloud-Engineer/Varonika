@@ -88,6 +88,7 @@ class ConversationManager:
         # queue is legitimately empty. Without this, streamed chunks get
         # dropped mid-answer.
         self._answer_in_flight = False
+        self._active_task = None
 
     def start(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
@@ -190,10 +191,24 @@ class ConversationManager:
             self._answer_in_flight = False
         self.tts.stop_and_clear()
         if self._loop and not self._loop.is_closed():
-            asyncio.run_coroutine_threadsafe(self.opencode.cancel(), self._loop)
+            self._loop.call_soon_threadsafe(self._cancel_active_task)
         # Whatever was streaming is dead: tell the UI to drop the stream
         # cursors so the next answer starts a fresh block at document end.
         self._emit_ui("Varonika_stream_reset", "")
+
+    def _start_command_task(self, text: str):
+        if self._loop and not self._loop.is_closed():
+            self._loop.call_soon_threadsafe(self._create_task_on_loop, text)
+
+    def _create_task_on_loop(self, text: str):
+        if self._active_task and not self._active_task.done():
+            self._active_task.cancel()
+        self._active_task = asyncio.create_task(self._process_command(text))
+
+    def _cancel_active_task(self):
+        if self._active_task and not self._active_task.done():
+            self._active_task.cancel()
+        asyncio.create_task(self.opencode.cancel())
 
     def _emit_ui(self, source: str, message: str):
         if self.ui_callback:
@@ -488,9 +503,7 @@ class ConversationManager:
                 self._clear_follow_up()
                 self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
                 return
-            asyncio.run_coroutine_threadsafe(
-                self._process_command(text), self._loop
-            )
+            self._start_command_task(text)
         except Exception as e:
             print(f"Transcription error: {e}")
         finally:
@@ -683,6 +696,10 @@ class ConversationManager:
         return text.strip()
 
     async def stop_async(self):
+        if self._active_task and not self._active_task.done():
+            self._active_task.cancel()
+            with contextlib.suppress(Exception):
+                await self._active_task
         self.audio.close()
         self.tts.stop()
         if self.hotkeys:

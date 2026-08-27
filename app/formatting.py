@@ -220,6 +220,9 @@ def _find_next_dollar(text, start):
         if text[j] == "$":
             if j + 1 < n and text[j + 1] == "$":
                 return -1
+            if j + 1 < n and text[j + 1].isdigit():
+                j += 1
+                continue
             return j
         if text[j] == "\n":
             k = j + 1
@@ -279,7 +282,7 @@ def latex_to_text(text: str) -> str:
                 if span is not None:
                     buf.append(_convert_math("".join(span))
                                if _looks_like_math("".join(span))
-                               else "".join(span))
+                               else "$" + "".join(span))
                     span = None
                 j = text.find("\n", i)
                 if j == -1:
@@ -296,7 +299,7 @@ def latex_to_text(text: str) -> str:
             if span is not None:
                 buf.append(_convert_math("".join(span))
                            if _looks_like_math("".join(span))
-                           else "".join(span))
+                           else "$" + "".join(span))
                 span = None
             if math_buf is None:
                 out.append("".join(buf))
@@ -312,24 +315,20 @@ def latex_to_text(text: str) -> str:
             i += 1
             continue
         if ch == "$":
+            if i + 1 < n and text[i + 1].isdigit():
+                buf.append(ch)
+                i += 1
+                continue
             close = _find_next_dollar(text, i + 1)
             if close != -1:
                 content = text[i + 1:close]
-                if _looks_like_math(content):
-                    out.append("".join(buf))
-                    buf = []
-                    out.append(_convert_math(content))
-                    i = close + 1
-                    continue
-                # Not math (e.g. currency "$100 and"): drop this opener and
-                # re-examine the closing '$' — it may be the opener of a
-                # real math span ("... and $\tau = 0.5$").
-                buf.append(content)
-                i = close
+                out.append("".join(buf))
+                buf = []
+                out.append(_convert_math(content))
+                i = close + 1
                 continue
-            # No closing '$' ahead: hold the span open across lines so a
-            # later '$' (or end of text) decides what it really is.
-            span = []
+            # No closing '$' ahead: treat as literal
+            buf.append(ch)
             i += 1
             continue
         if span is not None:
@@ -340,7 +339,7 @@ def latex_to_text(text: str) -> str:
     if span is not None:
         buf.append(_convert_math("".join(span))
                    if _looks_like_math("".join(span))
-                   else "".join(span))
+                   else "$" + "".join(span))
     if math_buf is not None:
         out.append(_convert_math("".join(math_buf)))
     out.append("".join(buf))

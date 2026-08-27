@@ -427,11 +427,15 @@ class MainWindow(QMainWindow):
             # Hold back the tail after the last unclosed '$' (parity-aware,
             # so several math spans in one chunk still cut at the right
             # place). Everything else re-renders as markdown right away.
+            # We ignore any '$' followed by a digit since it represents
+            # currency, not a math delimiter.
             pending = self._stream_pending + message
             cut = -1
             count = 0
             for idx, ch in enumerate(pending):
                 if ch == '$':
+                    if idx + 1 < len(pending) and pending[idx + 1].isdigit():
+                        continue
                     count += 1
                     if count % 2 == 1:
                         cut = idx
