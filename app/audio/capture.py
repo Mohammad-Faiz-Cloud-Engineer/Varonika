@@ -11,12 +11,10 @@ class AudioCapture:
     def __init__(self, sample_rate=16000, chunk_size=1280, device_name=""): # 1280 is ~80ms at 16khz
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
-        self.device_name = device_name or ""
         self.p = pyaudio.PyAudio()
         self.stream = None
         self.is_listening = False
         self.callbacks = []
-        self.active_device = self._default_device_name()
 
         self.queue = queue.Queue(maxsize=50)
         self.worker_thread = None
@@ -36,6 +34,16 @@ class AudioCapture:
         # causes PortAudio contention and stutters the live mic.
         self._availability_cache: dict[int, tuple[float, bool]] = {}
         self._CACHE_TTL = 60.0
+
+        # Auto-detect external headset at startup
+        auto_detected = self.find_auto_detected_device()
+        if auto_detected:
+            print(f"Auto-detected external microphone at startup: {auto_detected}")
+            self.device_name = auto_detected
+        else:
+            self.device_name = device_name or ""
+
+        self.active_device = self._default_device_name()
 
     def _canonical_name(self, index: int) -> str:
         """Full display name for a device index. PortAudio reports MME
@@ -150,6 +158,47 @@ class AudioCapture:
         return [(i, name) for i, name, _ in result
                 if self._is_live_device(name)
                 or any(self._is_available(c) for c in self._device_candidates(name))]
+
+    def find_auto_detected_device(self) -> str | None:
+        """Scan PortAudio input devices for external headsets/earphones.
+        Returns the best candidate name, or None if none found.
+        """
+        try:
+            available_devices = self.list_input_devices()
+        except Exception as e:
+            print(f"Error listing input devices for auto-detection: {e}")
+            return None
+
+        # Bluetooth TWS keywords:
+        bluetooth_kws = {"bluetooth", "wireless", "tws", "airpod", "buds", "earbud"}
+        # Wired / other headset keywords:
+        wired_kws = {"headset", "earphone", "headphone", "usb audio", "usb mic"}
+        # Excludes:
+        exclude_kws = {"microphone array", "internal mic", "realtek audio"}
+
+        bluetooth_candidates = []
+        wired_candidates = []
+
+        for _, name in available_devices:
+            name_lower = name.lower()
+            
+            # Check exclusions first
+            if any(exc in name_lower for exc in exclude_kws):
+                continue
+                
+            # Check Bluetooth TWS keywords
+            if any(kw in name_lower for kw in bluetooth_kws):
+                bluetooth_candidates.append(name)
+            # Check Wired keywords
+            elif any(kw in name_lower for kw in wired_kws):
+                wired_candidates.append(name)
+
+        if bluetooth_candidates:
+            return bluetooth_candidates[0]
+        if wired_candidates:
+            return wired_candidates[0]
+            
+        return None
 
     def _is_live_device(self, name: str) -> bool:
         """True when this name is the microphone already open for capture.
