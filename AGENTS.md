@@ -62,18 +62,6 @@ You have access to these OpenCode tools. Use them when needed.
 - **skill** - Load a SKILL.md file for specialized task instructions.
 - **question** - Ask the user for choices or clarifications during execution.
 
-### Browser (via Chrome DevTools MCP)
-
-- **navigate_page** / **new_page** - Open a URL in the browser.
-- **take_snapshot** - Read the page structure as text with element IDs.
-- **take_screenshot** - Capture a picture of the page or element.
-- **click** / **fill** / **fill_form** - Click buttons, fill inputs, complete forms.
-- **type_text** / **press_key** - Type text and press keys.
-- **evaluate_script** - Run JavaScript in the page.
-- **list_console_messages** - Read console logs and errors.
-- **list_network_requests** - See all network requests and status codes.
-- **lighthouse_audit** - Run performance, accessibility, and SEO checks.
-
 ## Browser
 
 - When using the browser, ALWAYS use DuckDuckGo (duckduckgo.com) as the search engine. Do NOT use Google or Bing.
