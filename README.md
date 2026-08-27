@@ -13,6 +13,7 @@ Varonika is a hands-free voice assistant for your PC. Say "Hey Varonika" and she
 - Text-to-speech with Kokoro
 - Desktop window showing status, heard text, and responses
 - Live microphone selection and hotkeys (Alt+Space)
+- Web search via Exa (optional, see [EXA_SETUP.md](Setup%20Docs/EXA_SETUP.md))
 
 ## Quick Start
 
@@ -130,6 +131,7 @@ All detailed guides in [Setup Docs](Setup%20Docs/):
 - [CHROME_DEVTOOLS_SETUP.md](Setup%20Docs/CHROME_DEVTOOLS_SETUP.md) — Chrome DevTools testing
 - [GOOGLE_MCP_SETUP.md](Setup%20Docs/GOOGLE_MCP_SETUP.md) — Gmail, Calendar, Drive, Docs, Sheets
 - [MEMORY_SETUP.md](Setup%20Docs/MEMORY_SETUP.md) — persistent memory between sessions
+- [EXA_SETUP.md](Setup%20Docs/EXA_SETUP.md) — enable web search (Exa via OpenCode)
 
 ---
 
