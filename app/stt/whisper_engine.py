@@ -172,7 +172,7 @@ class STTEngine:
             # space, then repair any punctuation left glued to the next word
             # ("privacy,meanwhile" -> "privacy, meanwhile"). The lookahead
             # only matches a letter, so decimals like "3.14" stay untouched.
-            text = " ".join(segment.text.strip() for segment in segments)
+            text = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
             text = re.sub(r'([.!?,;:])(?=[A-Za-z])', r'\1 ', text)
             return text.strip()
 

@@ -87,7 +87,7 @@ class VaronikaClient:
         # options, approving is wrong: deny explicitly instead of blindly
         # selecting the first (which could be a deny the agent never asked for).
         allow_id = next(
-            (o.option_id for o in options if str(getattr(o, "kind", "")).startswith("allow")),
+            (o.option_id for o in options if "allow" in str(getattr(o, "kind", "")).lower()),
             None,
         )
         if allow_id is None:

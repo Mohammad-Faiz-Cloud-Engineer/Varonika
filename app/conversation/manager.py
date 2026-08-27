@@ -17,7 +17,7 @@ import contextlib
 
 class ConversationManager:
     _WAKE_PHRASE_RE = re.compile(
-        r"^\s*(hey|ok|okay)?\s*(varonika|veronica|varonica|varunika|veronika|jarvis)[,\s!?.-]*",
+        r"^[^a-zA-Z0-9]*(hey|ok|okay)?\s*(varonika|veronica|varonica|varunika|veronika|jarvis)[^a-zA-Z0-9]*",
         re.IGNORECASE,
     )
     # Whole-utterance only. A substring match would wipe the session when

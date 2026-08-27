@@ -405,6 +405,10 @@ class MainWindow(QMainWindow):
     def _on_ui_message(self, source, message):
         if getattr(self, '_force_quit', False):
             return
+
+        sb = self.chat_view.verticalScrollBar()
+        at_bottom = sb.value() >= sb.maximum() - 15
+
         if source == "Varonika_stream":
             # Streaming chunk: append to the stream block (not document end,
             # so System notes appended mid-stream are never polluted)
@@ -505,9 +509,9 @@ class MainWindow(QMainWindow):
                 f'<span style="color:#888;">{html.escape(message)}</span>'
             )
 
-        # Auto-scroll
-        sb = self.chat_view.verticalScrollBar()
-        sb.setValue(sb.maximum())
+        force_scroll = source == "User"
+        if at_bottom or force_scroll:
+            sb.setValue(sb.maximum())
 
     def _on_state_change(self, state):
         if getattr(self, '_force_quit', False):
