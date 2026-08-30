@@ -32,17 +32,17 @@ def download_file(url, destination):
         with urllib.request.urlopen(req, timeout=60) as resp:
             total = int(resp.headers.get("Content-Length", 0))
             downloaded = 0
-            while True:
-                chunk = resp.read(8192)
-                if not chunk:
-                    break
-                with open(temp_path, "ab") as f:
+            with open(temp_path, "wb") as f:
+                while True:
+                    chunk = resp.read(8192)
+                    if not chunk:
+                        break
                     f.write(chunk)
-                downloaded += len(chunk)
-                if total > 0:
-                    progress = min(100, downloaded * 100 // total)
-                    sys.stdout.write(f"\rDownloading... {progress}%")
-                    sys.stdout.flush()
+                    downloaded += len(chunk)
+                    if total > 0:
+                        progress = min(100, downloaded * 100 // total)
+                        sys.stdout.write(f"\rDownloading... {progress}%")
+                        sys.stdout.flush()
         os.replace(temp_path, destination)
         print("\nDownload complete.")
     except Exception as e:

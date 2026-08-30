@@ -533,6 +533,7 @@ class ConversationManager:
             interrupt_gen = self._interrupt_gen
             self._request_seq += 1
             request_seq = self._request_seq
+            self._answer_in_flight = True
         if not self.opencode.is_connected():
             # Live check: also covers a connection that dropped while idle
             # and whose background reconnect has not finished yet. An
@@ -541,11 +542,17 @@ class ConversationManager:
             try:
                 ok = await self.opencode.ensure_connected()
             except asyncio.CancelledError:
+                with self._interrupt_lock:
+                    if interrupt_gen == self._interrupt_gen and request_seq == self._request_seq:
+                        self._answer_in_flight = False
                 self._return_after_interrupt(request_seq)
                 return
             except Exception:
                 ok = False
             if not ok:
+                with self._interrupt_lock:
+                    if interrupt_gen == self._interrupt_gen and request_seq == self._request_seq:
+                        self._answer_in_flight = False
                 self.tts.speak("OpenCode isn't available right now.")
                 self.tts.signal_answer_end()
                 self._emit_ui("Varonika", "OpenCode isn't available right now.")
@@ -568,6 +575,9 @@ class ConversationManager:
                 self.tts.signal_answer_end()
                 self._emit_ui("System", f"Reset failed: {e}")
 
+            with self._interrupt_lock:
+                if interrupt_gen == self._interrupt_gen and request_seq == self._request_seq:
+                    self._answer_in_flight = False
             self._arm_follow_up()
             self.state.set_state(AppState.SPEAKING)
             self.stt.reset()
@@ -581,7 +591,6 @@ class ConversationManager:
         # "Yes Boss" ack) lets the echo guard drop mid-answer, the state
         # machine moves out of SPEAKING, and streamed chunks get dropped.
         self.tts.signal_answer_start()
-        self._answer_in_flight = True
         self.state.set_state(AppState.THINKING)
 
         try:
@@ -662,9 +671,12 @@ class ConversationManager:
             # (a slow ACP cancel can unwind a stale task after a newer
             # prompt already started). A stale-True flag is harmless: the
             # flip only applies in SPEAKING, and every new answer re-arms
-            # it before streaming.
+            # it before streaming. The request_seq check covers the case
+            # where a new task started via hotkey without an explicit
+            # interrupt() call: the old task must not reset the flag that
+            # the new task just armed.
             with self._interrupt_lock:
-                if interrupt_gen == self._interrupt_gen:
+                if interrupt_gen == self._interrupt_gen and request_seq == self._request_seq:
                     self._answer_in_flight = False
 
     def _format_speech(self, text: str) -> str:
