@@ -22,7 +22,7 @@ Playwright MCP is Microsoft's official browser server. OpenCode talks to it thro
 
 ## Before you start
 
-- **Node.js 20 or newer.** Playwright MCP is an npm package. Check with `node --version`.
+- **Node.js 18 or newer.** Playwright MCP is an npm package. Check with `node --version`.
 - **OpenCode installed** and working with your model of choice.
 
 The browser itself downloads automatically on first use. You do not install Playwright separately.
@@ -155,7 +155,7 @@ Whatever you pick, remember the agent has the same power you have in that browse
 
 | Problem | Fix |
 | --- | --- |
-| `npx` is not recognized | Node.js is not installed or not on PATH. Install Node.js 20+ and reopen the terminal |
+| `npx` is not recognized | Node.js is not installed or not on PATH. Install Node.js 18+ and reopen the terminal |
 | Server starts but no browser opens | The browser downloads on first use, give it a minute. Or add `--headless` |
 | OpenCode says the config is invalid | Check the JSON: `command` must be a list, and `"type": "local"` must be present |
 | OpenCode will not start because of a bad config | Run with `OPENCODE_DISABLE_PROJECT_CONFIG=1` to skip the project config, fix the file, then restart normally |

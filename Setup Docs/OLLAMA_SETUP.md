@@ -52,7 +52,7 @@ See [ollama.com/models](https://ollama.com/models) for the full catalog. Good fi
 | `qwen3.5` | small | A good all-round starter on normal laptops |
 | `llama3.2` | small | Fast general chat and simple tasks |
 | `gemma4` | medium | Good explanations and small coding tasks |
-| `qwen3.5-coder` | medium | Coding focused, better on stronger machines |
+| `qwen3.5:27b` | large | Strong coding and reasoning on powerful machines |
 
 The download is big (several GB for medium models), so give it time. Check what you have with `ollama list`, and copy the model name exactly from that list, you will need it next.
 

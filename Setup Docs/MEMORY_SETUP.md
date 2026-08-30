@@ -24,7 +24,7 @@ When you talk to the agent, opencode-mem quietly notices important facts and sav
 ## Before you start
 
 - **Node.js 18 or newer.** Check with `node --version`.
-- **An LLM API key** (like an OpenAI or DeepSeek key). This is used only to help pick out memories from conversations. The memories themselves stay on your machine.
+- **An LLM API key** (like an OpenAI or Anthropic key). This is used only to help pick out memories from conversations. The memories themselves stay on your machine.
 
 ## Step 1: install opencode-mem
 
@@ -48,13 +48,22 @@ The wizard needs a model to read conversations and decide what is worth remember
 C:\Users\<you>\.config\opencode\opencode-mem.jsonc
 ```
 
-And add your provider details (example uses DeepSeek, any OpenAI-compatible provider works):
+**Recommended:** Use a provider that is already authenticated in OpenCode:
+
+```jsonc
+{
+  "opencodeProvider": "anthropic",
+  "opencodeModel": "claude-haiku-4-5-20251001"
+}
+```
+
+**Or** use a manual API key (any OpenAI-compatible provider works):
 
 ```jsonc
 {
   "memoryProvider": "openai-chat",
-  "memoryModel": "deepseek-chat",
-  "memoryApiUrl": "https://api.deepseek.com/v1",
+  "memoryModel": "gpt-4o-mini",
+  "memoryApiUrl": "https://api.openai.com/v1",
   "memoryApiKey": "your-api-key-here"
 }
 ```
@@ -108,7 +117,7 @@ You will see a timeline of every memory, a profile the agent built about you, an
 | "Save my work to memory" does nothing | Check the service with `opencode-mem status`, restart with `opencode-mem restart` |
 | Web page will not open | The service is stopped. Start it and try `http://127.0.0.1:4747` again |
 | No memories are saved | The LLM key in the config file is wrong or missing. Check Step 3 |
-| I want to wipe everything | Delete the storage folder `C:\Users\<you>\.opencode-mem\` (backup first, this deletes all memories) |
+| I want to wipe everything | Delete the storage folder `C:\Users\<you>\.opencode-mem\data\` (backup first, this deletes all memories) |
 
 ## A note about Varonika
 

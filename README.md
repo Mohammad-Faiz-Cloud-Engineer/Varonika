@@ -132,6 +132,7 @@ All detailed guides in [Setup Docs](Setup%20Docs/):
 - [GOOGLE_MCP_SETUP.md](Setup%20Docs/GOOGLE_MCP_SETUP.md) — Gmail, Calendar, Drive, Docs, Sheets
 - [MEMORY_SETUP.md](Setup%20Docs/MEMORY_SETUP.md) — persistent memory between sessions
 - [EXA_SETUP.md](Setup%20Docs/EXA_SETUP.md) — enable web search (Exa via OpenCode)
+- [OFFICEMCP_SETUP.md](Setup%20Docs/OFFICEMCP_SETUP.md) — control MS Office (Excel, Word, PowerPoint, Outlook, Teams, OneNote)
 
 ---
 

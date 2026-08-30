@@ -86,6 +86,7 @@ You can add flags to the `command` list to change the behavior:
 | `--autoConnect` | Connect to your already-running Chrome (Chrome will ask permission, click Allow) |
 | `--browserUrl=http://127.0.0.1:9222` | Attach to a Chrome you started yourself with remote debugging |
 | `--isolated` | Use a completely fresh profile with no cookies or history |
+| `--slim` | Expose a minimal set of 3 tools (navigation, scripts, screenshots only) |
 
 ## Testing a real site, step by step
 
@@ -113,12 +114,15 @@ You can also ask for a full report at the end:
 | `click` / `fill` / `fill_form` | Click things and fill forms |
 | `type_text` / `press_key` | Type text and press keys like Enter |
 | `hover` / `drag` / `upload_file` | Hover, drag elements, upload files |
+| `handle_dialog` | Accept or dismiss browser dialogs |
 | `evaluate_script` | Run JavaScript in the page |
-| `list_console_messages` | See console logs and errors |
-| `list_network_requests` | See all network requests and their status codes |
 | `wait_for` | Wait until some text appears on the page |
-| `emulate` | Pretend to be a different device or network speed |
+| `emulate` / `resize_page` | Pretend to be a different device, or resize the window |
 | `lighthouse_audit` | Run a full Lighthouse check (performance, accessibility, SEO) |
+| `performance_start_trace` / `performance_stop_trace` | Record a performance trace |
+| `list_console_messages` / `get_console_message` | See console logs and errors |
+| `list_network_requests` / `get_network_request` | See all network requests and their status codes |
+| `take_heapsnapshot` | Capture a heap snapshot for memory debugging |
 
 ## Troubleshooting
 
