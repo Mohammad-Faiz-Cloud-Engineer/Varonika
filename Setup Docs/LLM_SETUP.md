@@ -39,7 +39,7 @@ opencode models
 
 Pick one from the list and add it to your config file:
 
-```jsonc
+```json
 {
   "model": "ollama-cloud/gemma4:31b"
 }
@@ -65,7 +65,7 @@ OPENCODE_MODEL=ollama-cloud/gemma4:31b python app/main.py
 
 If you have your own OpenAI-compatible endpoint (any provider that speaks the OpenAI API: a cloud service, a self-hosted server, LM Studio, Ollama, etc.), add it as a custom provider:
 
-```jsonc
+```json
 {
   "provider": {
     "myprovider": {
@@ -99,7 +99,7 @@ set MYPROVIDER_API_KEY=your-api-key        # Windows PowerShell
 export MYPROVIDER_API_KEY=your-api-key     # Linux / macOS
 ```
 
-```jsonc
+```json
 {
   "provider": {
     "myprovider": {

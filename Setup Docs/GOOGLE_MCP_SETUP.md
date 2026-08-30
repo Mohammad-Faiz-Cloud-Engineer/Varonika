@@ -96,9 +96,9 @@ A browser window opens, log in with your Google account, and click through the p
 
 ## Step 5: add it to OpenCode's config
 
-Create or edit `opencode.jsonc` in the project folder (or `C:\Users\<you>\.config\opencode\opencode.jsonc` for all projects) and add:
+Create or edit `opencode.json` in the project folder (or `C:\Users\<you>\.config\opencode\opencode.jsonc` for all projects) and add:
 
-```jsonc
+```json
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {

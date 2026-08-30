@@ -133,4 +133,4 @@ You can also ask for a full report at the end:
 
 ## A note about Varonika
 
-Varonika talks through OpenCode, so this same setup automatically gives her browser testing too. Once the server is running, you can ask her things like "open my website on localhost, test the search box, and tell me if there are any console errors." She will drive the browser and report back. Varonika also has opencode's own built-in browser tools even without this setup, this server adds the full Chrome DevTools feature set on top.
+Varonika talks through OpenCode, so this same setup automatically gives her browser testing too. Once the server is running, you can ask her things like "open my website on localhost, test the search box, and tell me if there are any console errors." She will drive the browser and report back. Varonika also has OpenCode's own built-in browser tools even without this setup. This server adds the full Chrome DevTools feature set on top.

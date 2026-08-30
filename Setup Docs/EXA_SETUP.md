@@ -92,18 +92,7 @@ OPENCODE_ENABLE_EXA=1 opencode run "search the web for the latest news and tell 
 
 If the tool is available, OpenCode will call `websearch` and return results.
 
-## Why Exa over Parallel
 
-OpenCode also supports Parallel as an alternative (`OPENCODE_ENABLE_PARALLEL=1`). Exa is the better choice for Varonika:
-
-| Factor | Exa | Parallel |
-| --- | --- | --- |
-| Speed | 306ms to 1.5s | 2.9s to 13.6s |
-| Accuracy | Higher on most benchmarks | Catches up only at expensive tiers |
-| Through OpenCode | Free (no API key needed) | Free (no API key needed) |
-| Best for | Real-time agents, voice, chat | Deep research, background tasks |
-
-Varonika is a voice agent. The user expects a fast answer. Exa returns results in under a second. Parallel takes 3 to 14 seconds minimum, which is too slow for a voice experience.
 
 ## How Varonika uses search
 

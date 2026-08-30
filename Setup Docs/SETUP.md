@@ -38,7 +38,7 @@ sudo apt install python3.11 python3.11-venv python3.11-dev
 Open your terminal and run:
 
 ```bash
-sudo pacman -S python311
+sudo pacman -S python
 ```
 
 ### Verify

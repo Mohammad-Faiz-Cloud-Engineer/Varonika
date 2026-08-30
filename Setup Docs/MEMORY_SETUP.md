@@ -98,7 +98,7 @@ You will see a timeline of every memory, a profile the agent built about you, an
 - **Say it out loud if it matters.** "Remember that I prefer..." works much better than hoping it notices.
 - **Talk normally otherwise.** The service picks up facts by itself, you do not need to command it every time.
 - **Check the web page now and then.** You own the memories, review them like you would a diary.
-- **Getting too many stale memories?** Delete the old ones on the web page, the agent only uses what is still there.
+- **Getting too many stale memories?** Delete the old ones on the web page; the agent only uses what is still there.
 
 ## Troubleshooting
 
@@ -112,4 +112,4 @@ You will see a timeline of every memory, a profile the agent built about you, an
 
 ## A note about Varonika
 
-Varonika talks through OpenCode, so once this server is running, her opencode session uses the same memory box. That means she can genuinely remember you between restarts: your name, that she calls you Boss, how you like your answers. Nothing in Varonika's code needs to change, it is all config. Remember she only remembers what happens in her own chats, and you can always see and delete everything on the web page.
+Varonika talks through OpenCode, so once this server is running, her opencode session uses the same memory box. That means she can genuinely remember you between restarts: your name, that she calls you Boss, how you like your answers. Nothing in Varonika's code needs to change; it is all config. Remember that she only remembers what happens in her own chats, and you can always see and delete everything on the web page.

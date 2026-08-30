@@ -77,7 +77,7 @@ If Varonika is the only OpenCode user on this PC, use the global file. If other 
 
 Create or edit the file, with the model ID from Step 3 in two places:
 
-```jsonc
+```json
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -105,7 +105,7 @@ Replace `qwen2.5-coder-7b-instruct` with your actual model ID from Step 3.
 - `options.baseURL` is the LM Studio server address. `http://127.0.0.1:1234/v1` and `http://localhost:1234/v1` both work.
 - `models` lists the model IDs LM Studio can serve. Add more entries if you downloaded several models:
 
-```jsonc
+```json
 "models": {
   "qwen2.5-coder-7b-instruct": { "name": "Qwen 2.5 Coder 7B (local)" },
   "qwen2.5-coder-14b-instruct": { "name": "Qwen 2.5 Coder 14B (local)" }
