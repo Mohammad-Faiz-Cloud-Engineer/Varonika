@@ -174,9 +174,9 @@ class ConversationManager:
         self._clear_follow_up()
         self._care.touch()
         # Check for a caring reminder BEFORE entering LISTENING state.
-        # Same logic as the wake word path: while the reminder plays the
-        # audio callback stays in LISTENING_FOR_WAKEWORD and does not
-        # discard user speech via the echo guard.
+        # While the reminder plays, the echo guard (line 465) discards
+        # user speech to prevent self-transcription, but wake word
+        # detection stays active (line 410) so the user can interrupt.
         reminder = self._care.check()
         if reminder:
             self._emit_ui("System", reminder)
@@ -426,11 +426,10 @@ class ConversationManager:
                 self.tts.speak(random.choice(["Yes Boss", "Yes Sir"]))
                 self.tts.signal_answer_end()
                 # Check for a caring reminder BEFORE entering LISTENING
-                # state. While the reminder plays, the audio callback
-                # stays in LISTENING_FOR_WAKEWORD / SPEAKING and does
-                # not discard user speech via the echo guard. Once the
-                # reminder finishes, we transition to LISTENING so the
-                # user can speak their command without losing it.
+                # state. While the reminder plays, the echo guard
+                # (line 465) discards user speech to prevent
+                # self-transcription, but wake word detection stays
+                # active (line 410) so the user can interrupt.
                 reminder = self._care.check()
                 if reminder:
                     self._emit_ui("System", reminder)

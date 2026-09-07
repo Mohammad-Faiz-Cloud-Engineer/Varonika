@@ -235,6 +235,7 @@ class OpenCodeClient:
         # (the ACP server keeps streaming until the old prompt completes),
         # and the manager uses this to drop them.
         self._stream_seq = None
+        self._session_prompt_count = 0
 
     @property
     def stream_seq(self):
@@ -414,6 +415,7 @@ class OpenCodeClient:
             )
             self.session_id = resp.session_id
             self.varonika_client.session_id = resp.session_id
+            self._session_prompt_count = 0
         except Exception:
             await self._teardown_current()
             raise
@@ -561,6 +563,7 @@ class OpenCodeClient:
                 raise RuntimeError("OpenCode did not respond in time; the connection was reset.") from None
             self.session_id = resp.session_id
             self.varonika_client.session_id = self.session_id
+            self._session_prompt_count = 0
         model = await self.get_current_model()
         print(f"OpenCode session reset. New ID: {self.session_id} (Model: {model})")
 
@@ -581,7 +584,24 @@ class OpenCodeClient:
             self.varonika_client._accumulated_text = ""
             # Chunks that arrive from this point on belong to this request.
             self._stream_seq = stream_seq
-            content = [TextContentBlock(type="text", text=text)]
+            # On the first prompt of every session, force the LLM to
+            # read AGENTS.md so it knows its personality, rules, and behaviour.
+            prompt_text = text
+            if not self._session_prompt_count:
+                prompt_text = (
+                    "Before giving the answer to my query, first use the "
+                    "read tool to read the file AGENTS.md from the project "
+                    "root. Read it word by word, line by line. It contains "
+                    "your identity, your task flow, your hard rules, and "
+                    "your behaviour instructions. You MUST follow every "
+                    "single instruction in that file for ALL responses in "
+                    "this session. This is mandatory. After you have read "
+                    "and understood AGENTS.md, then answer my message "
+                    "below.\n\n"
+                    + text
+                )
+            self._session_prompt_count += 1
+            content = [TextContentBlock(type="text", text=prompt_text)]
 
             try:
                 await asyncio.wait_for(
