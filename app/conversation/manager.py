@@ -413,12 +413,12 @@ class ConversationManager:
         """Audio callback from the microphone: runs on the audio callback thread."""
         current = self.state.current
 
-        # Wake word detection during idle listening.
-        # It must NEVER run while TTS is speaking (speaker bleed would trigger it
-        # on her own voice).
-        is_talking = self.tts.is_speaking()
-        
-        if (current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING, AppState.LISTENING] and not is_talking):
+        # Wake word detection during idle/wakeword listening, speaking,
+        # or while a care reminder is playing (state is LISTENING but TTS
+        # is active). The last case lets "Hey Varonika" interrupt a
+        # reminder so the state machine never gets stuck.
+        if (current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING]
+                or (current == AppState.LISTENING and self.tts.is_speaking())):
             if self.wakeword.process_chunk(chunk):
                 print("Wake word detected!")
                 if current in [AppState.SPEAKING, AppState.LISTENING]:
@@ -431,6 +431,11 @@ class ConversationManager:
                 self.tts.speak(random.choice(["Yes Boss", "Yes Sir"]))
                 self.tts.signal_answer_end()
                 
+                # Check for a caring reminder BEFORE entering LISTENING
+                # state. While the reminder plays, the echo guard
+                # (line 465) discards user speech to prevent
+                # self-transcription, but wake word detection stays
+                # active (line 410) so the user can interrupt.
                 reminder = self._care.check()
                 if reminder:
                     self._emit_ui("System", reminder)
@@ -446,7 +451,7 @@ class ConversationManager:
         if (
             self.stt.is_calibrating
             and current == AppState.LISTENING_FOR_WAKEWORD
-            and not is_talking
+            and not self.tts.is_speaking()
         ):
             self.stt.feed_calibration(chunk)
 
