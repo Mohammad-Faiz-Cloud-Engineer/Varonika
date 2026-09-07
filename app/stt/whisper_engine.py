@@ -55,8 +55,9 @@ class STTEngine:
         self._transcribe_gen = 0
         self.audio_buffer = []
         self._buffered_samples = 0
-        self.last_speech_time = time.monotonic()
         self.speech_seen = False
+        self._loud_chunks = 0
+        self.last_speech_time = time.monotonic()
 
         # Calibration state
         self.is_calibrating = False
@@ -66,11 +67,12 @@ class STTEngine:
     def start_calibration(self, duration_sec: float = 2.0, chunk_size: int = 1280, _sample_rate: int = 16000):
         """Starts collecting audio chunks to establish a dynamic noise floor."""
         print(f"Calibrating noise floor for {duration_sec}s...")
-        self.is_calibrating = True
-        self.calibration_buffer = []
-        # Count chunks from the engine's own sample rate: the hardcoded
-        # default would miscount for a non-16 kHz engine.
-        self.calibration_chunks_needed = int((self.sample_rate * duration_sec) / chunk_size)
+        with self._lock:
+            self.is_calibrating = True
+            self.calibration_buffer = []
+            # Count chunks from the engine's own sample rate: the hardcoded
+            # default would miscount for a non-16 kHz engine.
+            self.calibration_chunks_needed = int((self.sample_rate * duration_sec) / chunk_size)
 
     def _as_float_and_energy(self, audio_chunk: np.ndarray) -> tuple[np.ndarray, float]:
         if audio_chunk.dtype == np.int16:
@@ -83,18 +85,19 @@ class STTEngine:
     def feed_calibration(self, audio_chunk: np.ndarray) -> None:
         """Accumulate room-noise energy. Never call this during TTS playback
         or while the user is being transcribed: those chunks are not noise."""
-        if not self.is_calibrating:
-            return
-        _, energy = self._as_float_and_energy(audio_chunk)
-        self.calibration_buffer.append(energy)
-        if len(self.calibration_buffer) >= self.calibration_chunks_needed:
-            # Median so a few loud slices (wake word, a door slam) cannot
-            # pull the floor up and make her miss quieter speech.
-            avg_noise = float(np.median(self.calibration_buffer))
-            self.energy_threshold = max(0.01, avg_noise * 1.5)
-            print(f"Calibration complete. New noise threshold: {self.energy_threshold:.4f}")
-            self.is_calibrating = False
-            self.calibration_buffer = []
+        with self._lock:
+            if not self.is_calibrating:
+                return
+            _, energy = self._as_float_and_energy(audio_chunk)
+            self.calibration_buffer.append(energy)
+            if len(self.calibration_buffer) >= self.calibration_chunks_needed:
+                # Median so a few loud slices (wake word, a door slam) cannot
+                # pull the floor up and make her miss quieter speech.
+                avg_noise = float(np.median(self.calibration_buffer))
+                self.energy_threshold = max(0.01, avg_noise * 1.5)
+                print(f"Calibration complete. New noise threshold: {self.energy_threshold:.4f}")
+                self.is_calibrating = False
+                self.calibration_buffer = []
 
     def discard_calibration_progress(self):
         """Drop samples collected so far, but keep calibrating.
@@ -103,8 +106,9 @@ class STTEngine:
         second often contains the wake phrase; if those samples stayed in
         the buffer, the noise floor would be set from speech.
         """
-        if self.is_calibrating:
-            self.calibration_buffer = []
+        with self._lock:
+            if self.is_calibrating:
+                self.calibration_buffer = []
 
     def process_chunk(self, audio_chunk: np.ndarray) -> bool:
         """
@@ -120,7 +124,13 @@ class STTEngine:
         with self._lock:
             if energy > self.energy_threshold:
                 self.last_speech_time = time.monotonic()
-                self.speech_seen = True
+                self._loud_chunks += 1
+                if self._loud_chunks >= 2:
+                    self.speech_seen = True
+            else:
+                # Decay loud chunks slowly to bridge small gaps
+                self._loud_chunks = max(0, self._loud_chunks - 1)
+                
             # Silence before the first spoken chunk has no transcription value.
             # Keeping it made a hotkey activation with no speech grow forever.
             if not self.speech_seen:
@@ -146,6 +156,7 @@ class STTEngine:
                     self.audio_buffer = []
                     self._buffered_samples = 0
                     self.speech_seen = False
+                    self._loud_chunks = 0
                     self.last_speech_time = time.monotonic()
                     return None
 
@@ -156,6 +167,7 @@ class STTEngine:
                 self.audio_buffer = []
                 self._buffered_samples = 0
                 self.speech_seen = False
+                self._loud_chunks = 0
                 self.last_speech_time = time.monotonic()
                 my_gen = self._transcribe_gen
 
@@ -181,6 +193,7 @@ class STTEngine:
             self.audio_buffer = []
             self._buffered_samples = 0
             self.speech_seen = False
+            self._loud_chunks = 0
             self.last_speech_time = time.monotonic()
             self._transcribe_gen += 1
 

@@ -19,6 +19,8 @@ class AudioCapture:
         self.queue = queue.Queue(maxsize=50)
         self.worker_thread = None
         self._stop_event = threading.Event()
+        self._callbacks_lock = threading.Lock()
+        self._cache_lock = threading.Lock()
         # Called as on_fallback(requested_name, actual_name) when the chosen
         # microphone cannot be opened and the system default is used instead.
         self.on_fallback = None
@@ -96,11 +98,12 @@ class AudioCapture:
         for 60 seconds to avoid PortAudio contention from repeated probe
         opens on every mic refresh."""
         now = time.monotonic()
-        cached = self._availability_cache.get(index)
-        if cached is not None:
-            ts, result = cached
-            if now - ts < self._CACHE_TTL:
-                return result
+        with self._cache_lock:
+            cached = self._availability_cache.get(index)
+            if cached is not None:
+                ts, result = cached
+                if now - ts < self._CACHE_TTL:
+                    return result
         try:
             with self._pa_lock:
                 s = self.p.open(
@@ -109,11 +112,13 @@ class AudioCapture:
                     input_device_index=index,
                 )
                 s.close()
-            self._availability_cache[index] = (now, True)
-            return True
+            result = True
         except Exception:
-            self._availability_cache[index] = (now, False)
-            return False
+            result = False
+            
+        with self._cache_lock:
+            self._availability_cache[index] = (now, result)
+        return result
 
     def list_input_devices(self):
         """List all input-capable microphones as [(index, raw_name), ...],
@@ -262,7 +267,14 @@ class AudioCapture:
         return modern + [i for i in candidates if i not in modern]
 
     def add_callback(self, callback):
-        self.callbacks.append(callback)
+        with self._callbacks_lock:
+            if callback not in self.callbacks:
+                self.callbacks.append(callback)
+
+    def remove_callback(self, callback):
+        with self._callbacks_lock:
+            if callback in self.callbacks:
+                self.callbacks.remove(callback)
 
     def _audio_callback(self, in_data, frame_count, time_info, status):
         try:
@@ -294,8 +306,8 @@ class AudioCapture:
                 if audio_np is None:
                     break
 
-                # We snapshot callbacks to be safe, though they are usually static
-                cbs = list(self.callbacks)
+                with self._callbacks_lock:
+                    cbs = list(self.callbacks)
                 for cb in cbs:
                     cb(audio_np)
             except queue.Empty:

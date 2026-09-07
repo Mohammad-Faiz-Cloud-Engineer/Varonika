@@ -237,6 +237,7 @@ class TTSEngine:
                     kwargs["extra_settings"] = sd.WasapiSettings(exclusive=False)
                 last_error = None
                 for attempt in range(6):
+                    s = None
                     try:
                         s = sd.OutputStream(**kwargs)
                         s.start()
@@ -244,8 +245,9 @@ class TTSEngine:
                         return self._stream
                     except Exception as e:
                         last_error = e
-                        with contextlib.suppress(Exception):
-                            s.close()
+                        if s is not None:
+                            with contextlib.suppress(Exception):
+                                s.close()
                         time.sleep(0.15 * (attempt + 1))
                 # WASAPI is wedged (BT stack settling, device state): fall
                 # back to the PortAudio default device at 24 kHz so speech
@@ -285,6 +287,7 @@ class TTSEngine:
         self._launch_worker(bump=True)
 
     def _launch_worker(self, bump: bool):
+        old_thread = getattr(self, "_thread", None)
         with self._lock:
             # Invalidate any still-running producer before the stop event
             # is cleared. Clearing first left a window where the old
@@ -292,6 +295,10 @@ class TTSEngine:
             if bump:
                 self._generation += 1
             gen = self._generation
+        if old_thread and old_thread.is_alive() and old_thread != threading.current_thread():
+            old_thread.join(timeout=1.0)
+            
+        with self._lock:
             self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._producer, args=(gen,), daemon=True
@@ -362,9 +369,9 @@ class TTSEngine:
                     with self._lock:
                         vol = self._volume
                     if vol != 1.0:
-                        # Boost loudness; clip so the audio card never gets
-                        # samples beyond full scale (which would crackle).
-                        audio = np.clip(audio * vol, -1.0, 1.0)
+                        # Boost loudness; use soft limiter (tanh) to prevent 
+                        # harsh harmonic distortion when pushed past full scale.
+                        audio = np.tanh(audio * vol)
                     self._queue_audio(audio, gen)
                     if self._stop_event.is_set() or gen != self._generation:
                         return

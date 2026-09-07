@@ -76,6 +76,8 @@ class CareMonitor:
     """
 
     def __init__(self):
+        import threading
+        self._lock = threading.Lock()
         now = time.monotonic()
         self._session_start = now
         self._last_interaction = now
@@ -92,7 +94,8 @@ class CareMonitor:
 
     def touch(self):
         """Call on every user interaction to keep the session alive."""
-        self._last_interaction = time.monotonic()
+        with self._lock:
+            self._last_interaction = time.monotonic()
 
     def check(self) -> str | None:
         """Returns a caring reminder string, or None if nothing to say right now.
@@ -100,43 +103,46 @@ class CareMonitor:
         Checks are cheap (time comparisons only) and fire at most once per
         window so the Boss is never nagged.
         """
-        now = _now_ist()
-        now_mono = time.monotonic()
-        hour = now.hour
+        with self._lock:
+            now = _now_ist()
+            now_mono = time.monotonic()
+            hour = now.hour
 
-        # ── Night (11 PM - 3 AM) ───────────────────────────────────
-        if (NIGHT_QUIET <= hour or hour < NIGHT_END) and self._due(now_mono, "_last_night", 3600):
-            return _pick(_NIGHT)
+            # ── Night (11 PM - 3 AM) ───────────────────────────────────
+            if (NIGHT_QUIET <= hour or hour < NIGHT_END) and self._due(now_mono, "_last_night", 3600):
+                return _pick(_NIGHT)
 
-        # ── Early morning (3 AM - 6 AM) ────────────────────────────
-        if NIGHT_END <= hour < EARLY_MORNING and self._due(now_mono, "_last_early", 3600):
-            return _pick(_EARLY)
+            # ── Early morning (3 AM - 6 AM) ────────────────────────────
+            if NIGHT_END <= hour < EARLY_MORNING and self._due(now_mono, "_last_early", 3600):
+                return _pick(_EARLY)
 
-        # ── Weekend / holiday ──────────────────────────────────────
-        if now.weekday() >= 5 and self._due(now_mono, "_last_weekend", 7200):
-            return _pick(_WEEKEND)
+            # ── Weekend / holiday ──────────────────────────────────────
+            if now.weekday() >= 5 and self._due(now_mono, "_last_weekend", 7200):
+                return _pick(_WEEKEND)
 
-        # ── Meal times ─────────────────────────────────────────────
-        if LUNCH_START <= hour < LUNCH_END and self._due(now_mono, "_last_meal", 3600):
-            return _pick(_LUNCH)
-        if DINNER_START <= hour < DINNER_END and self._due(now_mono, "_last_meal", 3600):
-            return _pick(_DINNER)
+            # ── Meal times ─────────────────────────────────────────────
+            if LUNCH_START <= hour < LUNCH_END and self._due(now_mono, "_last_meal", 3600):
+                return _pick(_LUNCH)
+            if DINNER_START <= hour < DINNER_END and self._due(now_mono, "_last_meal", 3600):
+                return _pick(_DINNER)
 
-        # ── Long session (2+ hours) ────────────────────────────────
-        session_len = now_mono - self._session_start
-        if session_len >= LONG_SESSION_WINDOW and self._due(now_mono, "_last_long_session", LONG_SESSION_WINDOW):
-            return _pick(_SESSION)
+            # ── Overworking (4+ hours) ─────────────────────────────────
+            session_len = now_mono - self._session_start
+            if session_len >= 4 * 3600 and self._due(now_mono, "_last_overwork", 2 * 3600):
+                self._last_long_session = now_mono
+                return _pick(_OVERWORK)
 
-        # ── Overworking (4+ hours) ─────────────────────────────────
-        if session_len >= 4 * 3600 and self._due(now_mono, "_last_overwork", 2 * 3600):
-            return _pick(_OVERWORK)
+            # ── Long session (2+ hours) ────────────────────────────────
+            if session_len >= LONG_SESSION_WINDOW and self._due(now_mono, "_last_long_session", LONG_SESSION_WINDOW):
+                self._last_overwork = now_mono
+                return _pick(_SESSION)
 
-        # ── Hydration (every 45 min) ───────────────────────────────
-        idle = now_mono - self._last_interaction
-        if idle < 300 and self._due(now_mono, "_last_hydration", HYDRATION_INTERVAL):
-            return _pick(_HYDRATION)
+            # ── Hydration (every 45 min) ───────────────────────────────
+            idle = now_mono - self._last_interaction
+            if idle < 300 and self._due(now_mono, "_last_hydration", HYDRATION_INTERVAL):
+                return _pick(_HYDRATION)
 
-        return None
+            return None
 
     def _due(self, now_mono: float, attr: str, interval: float) -> bool:
         last = getattr(self, attr)

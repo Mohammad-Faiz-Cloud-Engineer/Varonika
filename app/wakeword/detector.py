@@ -83,10 +83,13 @@ def ensure_wakeword_resources():
             if _ensure_resource(name) is None:
                 raise RuntimeError(f"Failed to download and verify wakeword resource: {name}")
 
+import threading
+
 class WakeWordDetector:
     def __init__(self, model_path: str, threshold: float = 0.6):
         self.threshold = threshold
         self.model, self.model_name = self._load(model_path)
+        self._lock = threading.Lock()
 
     def _load(self, model_path):
         try:
@@ -104,7 +107,6 @@ class WakeWordDetector:
             print(f"Error loading wake word model: {e}")
             return None, None
 
-
     def process_chunk(self, audio_chunk: np.ndarray) -> bool:
         """
         Process a chunk of audio (expected 16khz, int16)
@@ -112,16 +114,18 @@ class WakeWordDetector:
         """
         if not self.model:
             return False
-        prediction = self.model.predict(audio_chunk)
-        score = prediction.get(self.model_name, 0.0) if self.model_name else 0.0
-        if score > self.threshold:
-            # reset state after trigger
-            self.model.reset()
-            return True
+        with self._lock:
+            prediction = self.model.predict(audio_chunk)
+            score = prediction.get(self.model_name, 0.0) if self.model_name else 0.0
+            if score > self.threshold:
+                # reset state after trigger
+                self.model.reset()
+                return True
         return False
 
     def reset(self):
         """Clear the model's internal prediction/feature buffers, e.g. after
         a microphone switch so frames from the old device cannot trigger."""
         if self.model:
-            self.model.reset()
+            with self._lock:
+                self.model.reset()

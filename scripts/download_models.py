@@ -43,7 +43,8 @@ def download_file(url, destination, expected_hash=None):
     temp_path = Path(temp_path)
 
     try:
-        req = urllib.request.Request(url)
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Varonika/1.0'})
+        hash_sha256 = hashlib.sha256()
         with urllib.request.urlopen(req, timeout=60) as resp:
             total = int(resp.headers.get("Content-Length", 0))
             downloaded = 0
@@ -53,19 +54,21 @@ def download_file(url, destination, expected_hash=None):
                     if not chunk:
                         break
                     f.write(chunk)
+                    hash_sha256.update(chunk)
                     downloaded += len(chunk)
                     if total > 0:
                         progress = min(100, downloaded * 100 // total)
                         sys.stdout.write(f"\rDownloading... {progress}%")
                         sys.stdout.flush()
-        
+            print()
+            
+        file_hash = hash_sha256.hexdigest()
         if expected_hash:
-            actual_hash = get_file_hash(temp_path)
-            if actual_hash.lower() != expected_hash.lower():
-                raise RuntimeError(f"Hash mismatch for {destination.name}. Expected {expected_hash}, got {actual_hash}")
+            if file_hash.lower() != expected_hash.lower():
+                raise RuntimeError(f"Hash mismatch for {destination.name}. Expected {expected_hash}, got {file_hash}")
 
         os.replace(temp_path, destination)
-        print("\nDownload complete.")
+        print("Download complete.")
     except Exception as e:
         temp_path.unlink(missing_ok=True)
         print(f"\nFailed to download {url}: {e}")
@@ -115,7 +118,7 @@ def main():
     if use_custom:
         shutil.copy(custom_model, wakeword_model)
         print("Copied custom 'Hey Varonika' wake word model.")
-    elif not _usable(wakeword_model):
+    elif not _usable(wakeword_model, EXPECTED_HASHES.get("wakeword.onnx")):
         # URL for a pre-trained openwakeword model just to ensure we have a valid ONNX file
         wakeword_url = "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/hey_jarvis_v0.1.onnx"
         download_file(wakeword_url, wakeword_model, EXPECTED_HASHES.get("wakeword.onnx"))

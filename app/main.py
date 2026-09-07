@@ -39,11 +39,15 @@ def check_models():
             print("Download the models manually and place them in the models/ folder, then restart.")
 
 
+from PySide6.QtWidgets import QApplication, QSplashScreen
+from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt
+import threading
+import time
+
 def main():
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-    check_models()
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
@@ -51,6 +55,25 @@ def main():
     app_icon = load_app_icon()
     if not app_icon.isNull():
         app.setWindowIcon(app_icon)
+
+    # Show a splash screen during model downloads so the app doesn't appear frozen
+    pixmap = QPixmap(400, 200)
+    pixmap.fill(Qt.GlobalColor.black)
+    splash = QSplashScreen(pixmap, Qt.WindowType.WindowStaysOnTopHint)
+    splash.showMessage("Checking models (may download ~500MB on first run)...", 
+                       Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignBottom, 
+                       Qt.GlobalColor.white)
+    splash.show()
+    app.processEvents()
+
+    # Run check_models in a thread to keep the Qt event loop pumping
+    t = threading.Thread(target=check_models)
+    t.start()
+    while t.is_alive():
+        app.processEvents()
+        time.sleep(0.05)
+
+    splash.close()
 
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)
