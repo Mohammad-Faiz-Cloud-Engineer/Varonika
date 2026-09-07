@@ -12,6 +12,7 @@ from app.opencode.client import OpenCodeClient
 from app.stt.whisper_engine import STTEngine
 from app.tts.kokoro_engine import TTSEngine
 from app.wakeword.detector import WakeWordDetector
+from app.emotional.care import CareMonitor
 import contextlib
 
 
@@ -90,6 +91,10 @@ class ConversationManager:
         self._answer_in_flight = False
         self._active_task = None
 
+        # Emotional care monitor: tracks session, time of day, and delivers
+        # genuine wellbeing reminders at the right moments.
+        self._care = CareMonitor()
+
     def start(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
         self.tts.start_worker()
@@ -167,6 +172,15 @@ class ConversationManager:
     def activate_listening(self):
         """Enter listening mode from the hotkey: no follow-up timeout, waits as long as needed."""
         self._clear_follow_up()
+        self._care.touch()
+        # Check for a caring reminder BEFORE entering LISTENING state.
+        # Same logic as the wake word path: while the reminder plays the
+        # audio callback stays in LISTENING_FOR_WAKEWORD and does not
+        # discard user speech via the echo guard.
+        reminder = self._care.check()
+        if reminder:
+            self._emit_ui("System", reminder)
+            self.tts.speak(reminder)
         self.state.set_state(AppState.LISTENING)
         self.stt.discard_calibration_progress()
         self.stt.reset()
@@ -389,8 +403,12 @@ class ConversationManager:
         """Audio callback from the microphone: runs on the audio callback thread."""
         current = self.state.current
 
-        # Wake word detection during idle/wakeword listening or speaking
-        if current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING]:
+        # Wake word detection during idle/wakeword listening, speaking,
+        # or while a care reminder is playing (state is LISTENING but TTS
+        # is active). The last case lets "Hey Varonika" interrupt a
+        # reminder so the state machine never gets stuck.
+        if (current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING]
+                or (current == AppState.LISTENING and self.tts.is_speaking())):
             # Room-noise only: never while she is talking (speaker bleed
             # would raise the threshold and she would go deaf), and never
             # while the user is being transcribed (that used to hijack STT).
@@ -398,14 +416,25 @@ class ConversationManager:
             # led to it) must not be treated as room noise.
             if self.wakeword.process_chunk(chunk):
                 print("Wake word detected!")
-                if current == AppState.SPEAKING:
+                if current in [AppState.SPEAKING, AppState.LISTENING]:
                     self.interrupt()
 
                 self._clear_follow_up()
                 self._emit_ui("System", "Wake word detected!")
+                self._care.touch()
                 self.tts.signal_answer_start()
                 self.tts.speak(random.choice(["Yes Boss", "Yes Sir"]))
                 self.tts.signal_answer_end()
+                # Check for a caring reminder BEFORE entering LISTENING
+                # state. While the reminder plays, the audio callback
+                # stays in LISTENING_FOR_WAKEWORD / SPEAKING and does
+                # not discard user speech via the echo guard. Once the
+                # reminder finishes, we transition to LISTENING so the
+                # user can speak their command without losing it.
+                reminder = self._care.check()
+                if reminder:
+                    self._emit_ui("System", reminder)
+                    self.tts.speak(reminder)
                 self.state.set_state(AppState.LISTENING)
                 self.stt.discard_calibration_progress()
                 self.stt.reset()
@@ -477,6 +506,8 @@ class ConversationManager:
             text = self.stt.transcribe()
             if text is None:
                 return  # transcription was invalidated (e.g. hotkey re-activation)
+
+            self._care.touch()
 
             # Remove Whisper noise/silence hallucinations like [BLANK_AUDIO] or (wind blowing).
             # Only strip Whisper-style brackets, not all parenthesized text
