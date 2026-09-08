@@ -181,7 +181,6 @@ class MainWindow(QMainWindow):
         # The tail from the last unclosed '$' is held back until the next
         # chunk can complete it, so raw '$' never flashes mid-stream.
         self._stream_pending = ""
-        self._is_turn_active = False
         # True only during close_app: closeEvent minimizes to tray by
         # default; this flag tells it to actually quit.
         self._force_quit = False
@@ -556,9 +555,6 @@ class MainWindow(QMainWindow):
         self.manager.set_ui_callback(None)
         self.mic_refresh_ready.disconnect()
         self._mic_refresh_stop.set()
-        if hasattr(self, '_mic_refresh_thread') and self._mic_refresh_thread.is_alive():
-            # A short timeout ensures a hung PortAudio call cannot block exit forever
-            self._mic_refresh_thread.join(timeout=1.0)
         try:
             import asyncio
             await asyncio.wait_for(self.manager.stop_async(), timeout=2.0)

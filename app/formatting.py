@@ -239,20 +239,51 @@ def latex_to_text(text: str) -> str:
 
     Fenced code blocks are left untouched, so `$` inside code stays as-is.
     Handles $$...$$ block math, \\(...\\) / \\[...\\] and $...$ inline math.
+    A single fence-aware scanner pairs the '$' delimiters by looking at
+    the content between them, so currency ("$100"), lone dollars and math
+    that spans lines all resolve without ever leaving a raw '$' behind.
     """
+    # Pass 1: \(...\) and \[...\] math, fence-aware per line
+    lines = text.split("\n")
+    out = []
+    in_fence = False
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        line = re.sub(r"\\\[\s*(.*?)\s*\\\]",
+                      lambda m: _convert_math(m.group(1)), line, flags=re.DOTALL)
+        line = re.sub(r"\\\(\s*(.*?)\s*\\\)",
+                      lambda m: _convert_math(m.group(1)), line, flags=re.DOTALL)
+        out.append(line)
+    text = "\n".join(out)
+
+    # Pass 2: whole-text scan for $$ blocks and $ spans
     out = []
     buf = []
+    math_buf = None      # None when not inside a $$ block
+    span = None          # None when no inline span is open
     in_fence = False
     i = 0
     n = len(text)
-    
     while i < n:
+        ch = text[i]
         # Fence lines are consumed whole, never scanned
         if i == 0 or text[i - 1] == "\n":
             k = i
             while k < n and text[k] in " \t":
                 k += 1
             if text.startswith("```", k):
+                if span is not None:
+                    buf.append(_convert_math("".join(span))
+                               if _looks_like_math("".join(span))
+                               else "$" + "".join(span))
+                    span = None
                 j = text.find("\n", i)
                 if j == -1:
                     j = n
@@ -260,63 +291,56 @@ def latex_to_text(text: str) -> str:
                 in_fence = not in_fence
                 i = j
                 continue
-                
         if in_fence:
-            buf.append(text[i])
+            buf.append(ch)
             i += 1
             continue
-
-        # Block math: $$ ... $$
-        if text.startswith("$$", i):
-            close = text.find("$$", i + 2)
-            if close != -1:
+        if ch == "$" and i + 1 < n and text[i + 1] == "$":
+            if span is not None:
+                buf.append(_convert_math("".join(span))
+                           if _looks_like_math("".join(span))
+                           else "$" + "".join(span))
+                span = None
+            if math_buf is None:
                 out.append("".join(buf))
                 buf = []
-                out.append(_convert_math(text[i + 2:close]))
-                i = close + 2
-                continue
-
-        # Block math: \[ ... \]
-        if text.startswith("\\[", i):
-            close = text.find("\\]", i + 2)
-            if close != -1:
-                out.append("".join(buf))
-                buf = []
-                out.append(_convert_math(text[i + 2:close]))
-                i = close + 2
-                continue
-
-        # Inline math: \( ... \)
-        if text.startswith("\\(", i):
-            close = text.find("\\)", i + 2)
-            if close != -1:
-                out.append("".join(buf))
-                buf = []
-                out.append(_convert_math(text[i + 2:close]))
-                i = close + 2
-                continue
-
-        # Inline math: $ ... $
-        if text[i] == "$":
+                math_buf = []
+            else:
+                out.append(_convert_math("".join(math_buf)))
+                math_buf = None
+            i += 2
+            continue
+        if math_buf is not None:
+            math_buf.append(ch)
+            i += 1
+            continue
+        if ch == "$":
             if i + 1 < n and text[i + 1].isdigit():
-                buf.append(text[i])
+                buf.append(ch)
                 i += 1
                 continue
             close = _find_next_dollar(text, i + 1)
             if close != -1:
+                content = text[i + 1:close]
                 out.append("".join(buf))
                 buf = []
-                content = text[i + 1:close]
-                # Fallback check if it's actually math
-                if _looks_like_math(content):
-                    out.append(_convert_math(content))
-                else:
-                    out.append("$" + content + "$")
+                out.append(_convert_math(content))
                 i = close + 1
                 continue
-
-        buf.append(text[i])
+            # No closing '$' ahead: treat as literal
+            buf.append(ch)
+            i += 1
+            continue
+        if span is not None:
+            span.append(ch)
+        else:
+            buf.append(ch)
         i += 1
-
+    if span is not None:
+        buf.append(_convert_math("".join(span))
+                   if _looks_like_math("".join(span))
+                   else "$" + "".join(span))
+    if math_buf is not None:
+        out.append(_convert_math("".join(math_buf)))
     out.append("".join(buf))
     return "".join(out)

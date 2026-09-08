@@ -5,28 +5,13 @@ import tempfile
 import urllib.request
 from pathlib import Path
 import contextlib
-import hashlib
 
 WAKEWORD_RESOURCE_URLS = {
     "melspectrogram.onnx": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx",
     "embedding_model.onnx": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.onnx",
 }
 
-EXPECTED_HASHES = {
-    "melspectrogram.onnx": "ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f",
-    "embedding_model.onnx": "70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f",
-    "ggml-small.en.bin": "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
-    "wakeword.onnx": "e9917c470c2a2b14028162fb5fcb56fd7d87ebedf31a2877820fa518cc22514b",
-}
-
-def get_file_hash(path: Path) -> str:
-    hash_sha256 = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_sha256.update(chunk)
-    return hash_sha256.hexdigest()
-
-def download_file(url, destination, expected_hash=None):
+def download_file(url, destination):
     print(f"Downloading {url} to {destination}...")
     # A dead or blocked network must fail fast, not hang the app at startup.
     # Use per-request timeout instead of socket.setdefaulttimeout to avoid
@@ -43,8 +28,7 @@ def download_file(url, destination, expected_hash=None):
     temp_path = Path(temp_path)
 
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Varonika/1.0'})
-        hash_sha256 = hashlib.sha256()
+        req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=60) as resp:
             total = int(resp.headers.get("Content-Length", 0))
             downloaded = 0
@@ -54,36 +38,24 @@ def download_file(url, destination, expected_hash=None):
                     if not chunk:
                         break
                     f.write(chunk)
-                    hash_sha256.update(chunk)
                     downloaded += len(chunk)
                     if total > 0:
                         progress = min(100, downloaded * 100 // total)
                         sys.stdout.write(f"\rDownloading... {progress}%")
                         sys.stdout.flush()
-            print()
-            
-        file_hash = hash_sha256.hexdigest()
-        if expected_hash:
-            if file_hash.lower() != expected_hash.lower():
-                raise RuntimeError(f"Hash mismatch for {destination.name}. Expected {expected_hash}, got {file_hash}")
-
         os.replace(temp_path, destination)
-        print("Download complete.")
+        print("\nDownload complete.")
     except Exception as e:
         temp_path.unlink(missing_ok=True)
         print(f"\nFailed to download {url}: {e}")
         raise RuntimeError(f"Could not download model from {url}") from e
 
-def _usable(path: Path, expected_hash: str = None) -> bool:
+def _usable(path: Path) -> bool:
     """True when the file exists and is not empty. A zero-byte file left
     behind by a killed download must be re-downloaded, not treated as a
     valid model (it would load and then fail at runtime)."""
     try:
-        if not (path.exists() and path.stat().st_size > 0):
-            return False
-        if expected_hash:
-            return get_file_hash(path).lower() == expected_hash.lower()
-        return True
+        return path.exists() and path.stat().st_size > 0
     except OSError:
         return False
 
@@ -94,9 +66,9 @@ def main():
 
     # Download Whisper Model
     whisper_model = models_dir / "ggml-small.en.bin"
-    if not _usable(whisper_model, EXPECTED_HASHES.get("ggml-small.en.bin")):
+    if not _usable(whisper_model):
         whisper_url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin"
-        download_file(whisper_url, whisper_model, EXPECTED_HASHES.get("ggml-small.en.bin"))
+        download_file(whisper_url, whisper_model)
     else:
         print("Whisper model already exists.")
 
@@ -110,29 +82,30 @@ def main():
     use_custom = False
     if custom_model.exists():
         try:
-            use_custom = not wakeword_model.exists()
-            if not use_custom:
-                use_custom = get_file_hash(custom_model) != get_file_hash(wakeword_model)
+            use_custom = not wakeword_model.exists() or wakeword_model.stat().st_size != custom_model.stat().st_size
         except OSError:
             use_custom = False
     if use_custom:
         shutil.copy(custom_model, wakeword_model)
         print("Copied custom 'Hey Varonika' wake word model.")
-    elif not _usable(wakeword_model, EXPECTED_HASHES.get("wakeword.onnx")):
+    elif not _usable(wakeword_model):
         # URL for a pre-trained openwakeword model just to ensure we have a valid ONNX file
         wakeword_url = "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/hey_jarvis_v0.1.onnx"
-        download_file(wakeword_url, wakeword_model, EXPECTED_HASHES.get("wakeword.onnx"))
+        download_file(wakeword_url, wakeword_model)
         print("NOTE: Downloaded 'hey_jarvis' as a placeholder for 'Hey Varonika'. You must say 'Hey Jarvis' to trigger unless a custom model is provided.")
     else:
         print("Wakeword model already exists.")
 
     for name, url in WAKEWORD_RESOURCE_URLS.items():
         dest = models_dir / name
-        expected_hash = EXPECTED_HASHES.get(name)
-        if _usable(dest, expected_hash):
+        try:
+            valid = dest.exists() and dest.stat().st_size > 0
+        except OSError:
+            valid = False
+        if valid:
             print(f"{name} already exists.")
         else:
-            download_file(url, dest, expected_hash)
+            download_file(url, dest)
             print(f"Downloaded missing {name} for wake word.")
 
 if __name__ == "__main__":

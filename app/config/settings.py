@@ -36,10 +36,6 @@ def _resolve_model_path(path: str) -> str:
         p = BASE_DIR / p
     return str(p)
 
-import threading
-
-_config_lock = threading.Lock()
-
 def save_config_field(key: str, value) -> bool:
     """Persist one config field to config.yaml, preserving existing keys.
 
@@ -49,37 +45,36 @@ def save_config_field(key: str, value) -> bool:
     mic on every launch. Returns False on failure so callers can warn
     without breaking the live change that already happened.
     """
-    with _config_lock:
-        config_path = BASE_DIR / "config.yaml"
+    config_path = BASE_DIR / "config.yaml"
+    try:
+        data = {}
+        if config_path.exists():
+            with open(config_path, encoding="utf-8") as f:
+                loaded = yaml.safe_load(f)
+                # A hand-edited config containing a scalar or a list (e.g.
+                # just a stray number) must not crash the app: ignore it.
+                if isinstance(loaded, dict):
+                    data = loaded
+        data[key] = value
+        # Atomic write: write to a temp file in the same directory, then
+        # rename. A crash or power loss mid-write corrupts only the temp
+        # file, never the real config.yaml.
+        fd, temp_path = tempfile.mkstemp(
+            dir=config_path.parent, prefix=".config.", suffix=".tmp"
+        )
         try:
-            data = {}
-            if config_path.exists():
-                with open(config_path, encoding="utf-8") as f:
-                    loaded = yaml.safe_load(f)
-                    # A hand-edited config containing a scalar or a list (e.g.
-                    # just a stray number) must not crash the app: ignore it.
-                    if isinstance(loaded, dict):
-                        data = loaded
-            data[key] = value
-            # Atomic write: write to a temp file in the same directory, then
-            # rename. A crash or power loss mid-write corrupts only the temp
-            # file, never the real config.yaml.
-            fd, temp_path = tempfile.mkstemp(
-                dir=config_path.parent, prefix=".config.", suffix=".tmp"
-            )
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    yaml.safe_dump(data, f, sort_keys=False, default_flow_style=False)
-                os.replace(temp_path, config_path)
-            except Exception:
-                # Clean up the temp file on failure
-                with contextlib.suppress(OSError):
-                    os.unlink(temp_path)
-                raise
-            return True
-        except (OSError, yaml.YAMLError) as e:
-            print(f"Warning: could not save config '{key}': {e}")
-            return False
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                yaml.safe_dump(data, f, sort_keys=False, default_flow_style=False)
+            os.replace(temp_path, config_path)
+        except Exception:
+            # Clean up the temp file on failure
+            with contextlib.suppress(OSError):
+                os.unlink(temp_path)
+            raise
+        return True
+    except (OSError, yaml.YAMLError) as e:
+        print(f"Warning: could not save config '{key}': {e}")
+        return False
 
 def load_config() -> Config:
     config_path = BASE_DIR / "config.yaml"

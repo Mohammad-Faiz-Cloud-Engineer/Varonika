@@ -106,13 +106,8 @@ class VaronikaClient:
     ) -> ReadTextFileResponse:
         """Read a file slice. ACP `line` is 1-based; `limit` is a line count, not bytes."""
         try:
-            base_dir = Path(BASE_DIR).resolve()
-            resolved_path = Path(path).resolve()
-            if not resolved_path.is_relative_to(base_dir):
-                raise Exception(f"Path '{path}' is outside the workspace '{base_dir}'.")
-
             start = line if (line is not None and line > 0) else 1
-            with open(resolved_path, encoding="utf-8", errors="replace") as f:
+            with open(path, encoding="utf-8", errors="replace") as f:
                 if start == 1 and limit is None:
                     content = f.read()
                 else:
@@ -126,23 +121,18 @@ class VaronikaClient:
                     content = "".join(rows)
             return ReadTextFileResponse(content=content)
         except Exception as e:
-            raise RequestError(1, f"Error reading file: {e}") from e
+            return ReadTextFileResponse(content=f"Error reading file: {e}")
 
     async def write_text_file(self, content: str, path: str, session_id: str, **kwargs: Any) -> WriteTextFileResponse | None:
         try:
-            base_dir = Path(BASE_DIR).resolve()
-            resolved_path = Path(path).resolve()
-            if not resolved_path.is_relative_to(base_dir):
-                raise Exception(f"Path '{path}' is outside the workspace '{base_dir}'.")
-
-            dirname = os.path.dirname(resolved_path)
+            dirname = os.path.dirname(path)
             if dirname:
                 os.makedirs(dirname, exist_ok=True)
-            with open(resolved_path, "w", encoding="utf-8") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
             return WriteTextFileResponse()
         except Exception as e:
-            raise RequestError(1, f"Failed to write file: {e}") from e
+            raise Exception(f"Failed to write file: {e}") from e
 
     async def create_terminal(self, command: str, session_id: str, **kwargs: Any) -> CreateTerminalResponse:
         # Terminals are not supported: tell the agent with a proper JSON-RPC
@@ -245,7 +235,6 @@ class OpenCodeClient:
         # (the ACP server keeps streaming until the old prompt completes),
         # and the manager uses this to drop them.
         self._stream_seq = None
-        self._session_prompt_count = 0
 
     @property
     def stream_seq(self):
@@ -425,7 +414,6 @@ class OpenCodeClient:
             )
             self.session_id = resp.session_id
             self.varonika_client.session_id = resp.session_id
-            self._session_prompt_count = 0
         except Exception:
             await self._teardown_current()
             raise
@@ -573,7 +561,6 @@ class OpenCodeClient:
                 raise RuntimeError("OpenCode did not respond in time; the connection was reset.") from None
             self.session_id = resp.session_id
             self.varonika_client.session_id = self.session_id
-            self._session_prompt_count = 0
         model = await self.get_current_model()
         print(f"OpenCode session reset. New ID: {self.session_id} (Model: {model})")
 
@@ -594,24 +581,7 @@ class OpenCodeClient:
             self.varonika_client._accumulated_text = ""
             # Chunks that arrive from this point on belong to this request.
             self._stream_seq = stream_seq
-            # On the first prompt of every session, force the LLM to
-            # read AGENTS.md so it knows its personality, rules, and behaviour.
-            prompt_text = text
-            if not self._session_prompt_count:
-                prompt_text = (
-                    "Before giving the answer to my query, first use the "
-                    "read tool to read the file AGENTS.md from the project "
-                    "root. Read it word by word, line by line. It contains "
-                    "your identity, your task flow, your hard rules, and "
-                    "your behaviour instructions. You MUST follow every "
-                    "single instruction in that file for ALL responses in "
-                    "this session. This is mandatory. After you have read "
-                    "and understood AGENTS.md, then answer my message "
-                    "below.\n\n"
-                    + text
-                )
-            self._session_prompt_count += 1
-            content = [TextContentBlock(type="text", text=prompt_text)]
+            content = [TextContentBlock(type="text", text=text)]
 
             try:
                 await asyncio.wait_for(

@@ -10,7 +10,7 @@ class HotkeyListener:
         self._hotkey = None
 
     def start(self):
-        self._hotkey = keyboard.add_hotkey(self.activate_key, self._on_activate, suppress=True)
+        self._hotkey = keyboard.add_hotkey(self.activate_key, self._on_activate)
         print(f"Hotkeys registered: {self.activate_key} to activate.")
 
     def _on_activate(self):
