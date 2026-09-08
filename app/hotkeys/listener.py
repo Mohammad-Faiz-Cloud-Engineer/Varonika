@@ -52,3 +52,5 @@ class HotkeyListener:
                 # every keyboard hook in the process, including hooks
                 # registered by other components or accessibility tools.
                 print(f"Warning: could not remove hotkey: {e}")
+            finally:
+                self._hotkey = None

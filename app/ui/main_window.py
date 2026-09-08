@@ -560,8 +560,11 @@ class MainWindow(QMainWindow):
         # target a destroyed widget.
         self.manager.state.remove_listener(self._thread_safe_state)
         self.manager.set_ui_callback(None)
-        self.mic_refresh_ready.disconnect()
+        with contextlib.suppress(Exception):
+            self.mic_refresh_ready.disconnect()
         self._mic_refresh_stop.set()
+        if hasattr(self, '_mic_refresh_thread') and self._mic_refresh_thread.is_alive():
+            self._mic_refresh_thread.join(timeout=2.0)
         try:
             import asyncio
             await asyncio.wait_for(self.manager.stop_async(), timeout=2.0)

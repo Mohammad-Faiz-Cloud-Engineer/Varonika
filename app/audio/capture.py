@@ -96,24 +96,24 @@ class AudioCapture:
         for 60 seconds to avoid PortAudio contention from repeated probe
         opens on every mic refresh."""
         now = time.monotonic()
-        cached = self._availability_cache.get(index)
-        if cached is not None:
-            ts, result = cached
-            if now - ts < self._CACHE_TTL:
-                return result
-        try:
-            with self._pa_lock:
+        with self._pa_lock:
+            cached = self._availability_cache.get(index)
+            if cached is not None:
+                ts, result = cached
+                if now - ts < self._CACHE_TTL:
+                    return result
+            try:
                 s = self.p.open(
                     format=pyaudio.paInt16, channels=1, rate=self.sample_rate,
                     input=True, frames_per_buffer=self.chunk_size,
                     input_device_index=index,
                 )
                 s.close()
-            self._availability_cache[index] = (now, True)
-            return True
-        except Exception:
-            self._availability_cache[index] = (now, False)
-            return False
+                self._availability_cache[index] = (now, True)
+                return True
+            except Exception:
+                self._availability_cache[index] = (now, False)
+                return False
 
     def list_input_devices(self):
         """List all input-capable microphones as [(index, raw_name), ...],
@@ -396,7 +396,8 @@ class AudioCapture:
         # A mic switch can reconnect a Bluetooth device or bring up a
         # previously dead jack: clear the cached probe results so every
         # device is freshly tested on the next enumeration.
-        self._availability_cache.clear()
+        with self._pa_lock:
+            self._availability_cache.clear()
         self.start()
         print(f"Microphone in use: {self.active_device}")
 
