@@ -63,7 +63,7 @@ class STTEngine:
         self.calibration_buffer = []
         self.calibration_chunks_needed = 0
 
-    def start_calibration(self, duration_sec: float = 2.0, chunk_size: int = 1280, _sample_rate: int = 16000):
+    def start_calibration(self, duration_sec: float = 2.0, chunk_size: int = 1280):
         """Starts collecting audio chunks to establish a dynamic noise floor."""
         print(f"Calibrating noise floor for {duration_sec}s...")
         self.is_calibrating = True

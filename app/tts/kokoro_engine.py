@@ -457,7 +457,10 @@ class TTSEngine:
 
     def speak(self, text: str):
         """Enqueue text to be spoken."""
-        if not text or self.pipeline is None:
+        if not text:
+            return
+        if self.pipeline is None:
+            print("WARNING: TTS pipeline not initialized; skipping speech output.")
             return
         with self._lock:
             # An interrupt holds this event until the replacement worker

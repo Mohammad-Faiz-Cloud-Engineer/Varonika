@@ -246,17 +246,8 @@ class ConversationManager:
 
             # Strip complete code blocks and inline code from the TTS buffer
             # so they don't mess up sentence splitting.
-            while True:
-                match = re.search(r'```[\s\S]*?```', self._stream_buffer)
-                if not match:
-                    break
-                self._stream_buffer = self._stream_buffer[:match.start()] + " I've generated the code. " + self._stream_buffer[match.end():]
-
-            while True:
-                match = re.search(r'`[^`]+`', self._stream_buffer)
-                if not match:
-                    break
-                self._stream_buffer = self._stream_buffer[:match.start()] + " code snippet " + self._stream_buffer[match.end():]
+            self._stream_buffer = re.sub(r'```[\s\S]*?```', " I've generated the code. ", self._stream_buffer)
+            self._stream_buffer = re.sub(r'`[^`]+`', " code snippet ", self._stream_buffer)
 
             # Check if there is an open code block (starts with ``` but not closed)
             open_code_idx = self._stream_buffer.find('```')

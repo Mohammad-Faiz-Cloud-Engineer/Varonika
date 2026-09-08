@@ -43,6 +43,7 @@ def download_file(url, destination, expected_hash=None):
     temp_path = Path(temp_path)
 
     try:
+        hash_sha256 = hashlib.sha256() if expected_hash else None
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=60) as resp:
             total = int(resp.headers.get("Content-Length", 0))
@@ -53,6 +54,8 @@ def download_file(url, destination, expected_hash=None):
                     if not chunk:
                         break
                     f.write(chunk)
+                    if hash_sha256:
+                        hash_sha256.update(chunk)
                     downloaded += len(chunk)
                     if total > 0:
                         progress = min(100, downloaded * 100 // total)
@@ -60,7 +63,7 @@ def download_file(url, destination, expected_hash=None):
                         sys.stdout.flush()
         
         if expected_hash:
-            actual_hash = get_file_hash(temp_path)
+            actual_hash = hash_sha256.hexdigest()
             if actual_hash.lower() != expected_hash.lower():
                 raise RuntimeError(f"Hash mismatch for {destination.name}. Expected {expected_hash}, got {actual_hash}")
 

@@ -123,7 +123,7 @@ class AudioCapture:
         names to 31 chars; merge such truncated entries with the device's
         full-name entry. Finally, drop devices that cannot be opened at our
         sample rate right now (disconnected Bluetooth ghosts, dead jacks)."""
-        devices = []
+        raw_devices = []
         for i in range(self.p.get_device_count()):
             try:
                 info = self.p.get_device_info_by_index(i)
@@ -138,11 +138,12 @@ class AudioCapture:
                     except Exception:
                         api_name = ""
                     is_modern = "wasapi" in api_name.lower() or "wdm-ks" in api_name.lower()
-                    devices.append((i, name, is_modern))
+                    raw_devices.append((i, name, is_modern))
             except Exception:
                 continue
+
         seen = {}
-        for i, name, is_modern in devices:
+        for i, name, is_modern in raw_devices:
             key = name.lower()
             if key not in seen or (is_modern and not seen[key][2]):
                 seen[key] = (i, name, is_modern)
@@ -155,9 +156,15 @@ class AudioCapture:
             if len(name) == 31 and self._dedupe_key(name) in full_by_prefix:
                 continue
             result.append((i, name, is_modern))
+
+        def get_candidates(target_name: str) -> list[int]:
+            matching = [i for i, n, _ in raw_devices if self._matches(target_name, n)]
+            modern = [i for i, n, is_m in raw_devices if is_m and self._matches(target_name, n)]
+            return modern + [i for i in matching if i not in modern]
+
         return [(i, name) for i, name, _ in result
                 if self._is_live_device(name)
-                or any(self._is_available(c) for c in self._device_candidates(name))]
+                or any(self._is_available(c) for c in get_candidates(name))]
 
     def find_auto_detected_device(self) -> str | None:
         """Scan PortAudio input devices for external headsets/earphones.
