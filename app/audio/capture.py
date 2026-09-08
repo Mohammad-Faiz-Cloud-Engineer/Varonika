@@ -269,7 +269,8 @@ class AudioCapture:
         return modern + [i for i in candidates if i not in modern]
 
     def add_callback(self, callback):
-        self.callbacks.append(callback)
+        with self._pa_lock:
+            self.callbacks.append(callback)
 
     def _audio_callback(self, in_data, frame_count, time_info, status):
         try:

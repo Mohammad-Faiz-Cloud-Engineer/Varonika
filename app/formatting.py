@@ -243,31 +243,24 @@ def latex_to_text(text: str) -> str:
     the content between them, so currency ("$100"), lone dollars and math
     that spans lines all resolve without ever leaving a raw '$' behind.
     """
-    # Pass 1: \(...\) and \[...\] math, fence-aware per line
-    lines = text.split("\n")
-    out = []
-    in_fence = False
-    for line in lines:
-        stripped = line.lstrip()
-        if stripped.startswith("```"):
-            in_fence = not in_fence
-            out.append(line)
-            continue
-        if in_fence:
-            out.append(line)
-            continue
-        line = re.sub(r"\\\[\s*(.*?)\s*\\\]",
-                      lambda m: _convert_math(m.group(1)), line, flags=re.DOTALL)
-        line = re.sub(r"\\\(\s*(.*?)\s*\\\)",
-                      lambda m: _convert_math(m.group(1)), line, flags=re.DOTALL)
-        out.append(line)
-    text = "\n".join(out)
+    # Pass 1: \(...\) and \[...\] math, fence-aware across full text
+    parts = []
+    for idx, chunk in enumerate(text.split("```")):
+        if idx % 2 == 1:
+            # Inside fenced code block: leave untouched
+            parts.append(chunk)
+        else:
+            chunk = re.sub(r"\\\[\s*(.*?)\s*\\\]",
+                           lambda m: _convert_math(m.group(1)), chunk, flags=re.DOTALL)
+            chunk = re.sub(r"\\\(\s*(.*?)\s*\\\)",
+                           lambda m: _convert_math(m.group(1)), chunk, flags=re.DOTALL)
+            parts.append(chunk)
+    text = "```".join(parts)
 
     # Pass 2: whole-text scan for $$ blocks and $ spans
     out = []
     buf = []
     math_buf = None      # None when not inside a $$ block
-    span = None          # None when no inline span is open
     in_fence = False
     i = 0
     n = len(text)
@@ -279,11 +272,6 @@ def latex_to_text(text: str) -> str:
             while k < n and text[k] in " \t":
                 k += 1
             if text.startswith("```", k):
-                if span is not None:
-                    buf.append(_convert_math("".join(span))
-                               if _looks_like_math("".join(span))
-                               else "$" + "".join(span))
-                    span = None
                 j = text.find("\n", i)
                 if j == -1:
                     j = n
@@ -296,11 +284,6 @@ def latex_to_text(text: str) -> str:
             i += 1
             continue
         if ch == "$" and i + 1 < n and text[i + 1] == "$":
-            if span is not None:
-                buf.append(_convert_math("".join(span))
-                           if _looks_like_math("".join(span))
-                           else "$" + "".join(span))
-                span = None
             if math_buf is None:
                 out.append("".join(buf))
                 buf = []
@@ -324,22 +307,18 @@ def latex_to_text(text: str) -> str:
                 content = text[i + 1:close]
                 out.append("".join(buf))
                 buf = []
-                out.append(_convert_math(content))
+                if _looks_like_math(content):
+                    out.append(_convert_math(content))
+                else:
+                    out.append(f"${content}$")
                 i = close + 1
                 continue
             # No closing '$' ahead: treat as literal
             buf.append(ch)
             i += 1
             continue
-        if span is not None:
-            span.append(ch)
-        else:
-            buf.append(ch)
+        buf.append(ch)
         i += 1
-    if span is not None:
-        buf.append(_convert_math("".join(span))
-                   if _looks_like_math("".join(span))
-                   else "$" + "".join(span))
     if math_buf is not None:
         out.append(_convert_math("".join(math_buf)))
     out.append("".join(buf))

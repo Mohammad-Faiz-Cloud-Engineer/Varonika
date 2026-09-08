@@ -101,8 +101,12 @@ def main():
     window.sync_mic_combo()
     window.show()
 
-    with loop:
-        loop.run_forever()
+    try:
+        with loop:
+            loop.run_forever()
+    finally:
+        with contextlib.suppress(Exception):
+            loop.run_until_complete(manager.stop_async())
 
 
 if __name__ == "__main__":

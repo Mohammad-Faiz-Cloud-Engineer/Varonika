@@ -237,6 +237,7 @@ class TTSEngine:
                     kwargs["extra_settings"] = sd.WasapiSettings(exclusive=False)
                 last_error = None
                 for attempt in range(6):
+                    s = None
                     try:
                         s = sd.OutputStream(**kwargs)
                         s.start()
@@ -244,12 +245,14 @@ class TTSEngine:
                         return self._stream
                     except Exception as e:
                         last_error = e
-                        with contextlib.suppress(Exception):
-                            s.close()
+                        if s is not None:
+                            with contextlib.suppress(Exception):
+                                s.close()
                         time.sleep(0.15 * (attempt + 1))
                 # WASAPI is wedged (BT stack settling, device state): fall
                 # back to the PortAudio default device at 24 kHz so speech
                 # is never lost until the app restarts.
+                s = None
                 try:
                     self._out_device = None
                     with self._audio_lock:
@@ -266,8 +269,9 @@ class TTSEngine:
                     print("TTS output: fell back to default device (MME) at 24 kHz")
                     return self._stream
                 except Exception as e2:
-                    with contextlib.suppress(Exception):
-                        s.close()
+                    if s is not None:
+                        with contextlib.suppress(Exception):
+                            s.close()
                     print(f"TTS output unavailable: {last_error} / fallback: {e2}")
                     return None
             return self._stream

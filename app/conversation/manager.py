@@ -247,7 +247,7 @@ class ConversationManager:
             # Strip complete code blocks and inline code from the TTS buffer
             # so they don't mess up sentence splitting.
             self._stream_buffer = re.sub(r'```[\s\S]*?```', " I've generated the code. ", self._stream_buffer)
-            self._stream_buffer = re.sub(r'`[^`]+`', " code snippet ", self._stream_buffer)
+            self._stream_buffer = re.sub(r'`[^`]*`', " code snippet ", self._stream_buffer)
 
             # Check if there is an open code block (starts with ``` but not closed)
             open_code_idx = self._stream_buffer.find('```')
@@ -380,8 +380,8 @@ class ConversationManager:
         """Audio callback from the microphone: runs on the audio callback thread."""
         current = self.state.current
 
-        # Wake word detection during idle/wakeword listening or speaking
-        if current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING]:
+        # Wake word detection during idle/wakeword listening, speaking, thinking, or executing tool
+        if current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING, AppState.THINKING, AppState.EXECUTING_TOOL]:
             # Room-noise only: never while she is talking (speaker bleed
             # would raise the threshold and she would go deaf), and never
             # while the user is being transcribed (that used to hijack STT).
@@ -389,7 +389,7 @@ class ConversationManager:
             # led to it) must not be treated as room noise.
             if self.wakeword.process_chunk(chunk):
                 print("Wake word detected!")
-                if current == AppState.SPEAKING:
+                if current in [AppState.SPEAKING, AppState.THINKING, AppState.EXECUTING_TOOL]:
                     self.interrupt()
 
                 self._clear_follow_up()
@@ -482,6 +482,10 @@ class ConversationManager:
             if not text:
                 self._clear_follow_up()
                 self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+                return
+
+            # Check if an interrupt invalidated this transcription while Whisper was running
+            if start_gen != self.stt.current_generation:
                 return
 
             print(f"User said: {text}")
