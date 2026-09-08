@@ -430,6 +430,13 @@ class MainWindow(QMainWindow):
             # We ignore any '$' followed by a digit since it represents
             # currency, not a math delimiter.
             pending = self._stream_pending + message
+            
+            # Hold back a trailing '$' to check if a digit follows in the next chunk
+            held_back = ""
+            if pending and pending[-1] == '$':
+                held_back = "$"
+                pending = pending[:-1]
+                
             cut = -1
             count = 0
             for idx, ch in enumerate(pending):
@@ -441,10 +448,10 @@ class MainWindow(QMainWindow):
                         cut = idx
             if count % 2 == 1:
                 self._stream_text += pending[:cut]
-                self._stream_pending = pending[cut:]
+                self._stream_pending = pending[cut:] + held_back
             else:
                 self._stream_text += pending
-                self._stream_pending = ""
+                self._stream_pending = held_back
             cursor = self.chat_view.textCursor()
             cursor.setPosition(self._stream_start)
             cursor.setPosition(self._stream_end, QTextCursor.MoveMode.KeepAnchor)

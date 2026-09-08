@@ -16,14 +16,36 @@ from app.hotkeys.listener import HotkeyListener
 from app.ui.main_window import MainWindow, load_app_icon
 
 
-def check_models():
+def check_models(app):
     """Ensure models are downloaded before starting."""
     scripts_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
     dl_script = os.path.join(scripts_dir, "download_models.py")
     if os.path.exists(dl_script):
         print("Checking models...")
+        
+        from PySide6.QtWidgets import QSplashScreen
+        from PySide6.QtCore import Qt
+        import time
+        
+        app_icon = load_app_icon()
+        splash = QSplashScreen(app_icon.pixmap(256, 256) if not app_icon.isNull() else None)
+        splash.show()
+        splash.showMessage("Checking AI Models...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+        app.processEvents()
+        
         try:
-            subprocess.run([sys.executable, dl_script], check=True, timeout=1800)
+            process = subprocess.Popen([sys.executable, dl_script])
+            start_time = time.time()
+            while process.poll() is None:
+                app.processEvents()
+                time.sleep(0.05)
+                if time.time() - start_time > 2.0:
+                    splash.showMessage("Downloading AI Models (this may take a few minutes)...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+                if time.time() - start_time > 1800:
+                    process.kill()
+                    raise subprocess.TimeoutExpired(process.args, 1800)
+            if process.returncode != 0:
+                print(f"WARNING: Model download script exited with code {process.returncode}")
         except subprocess.TimeoutExpired:
             # The Whisper model alone is ~487 MB: on a slow connection the
             # in-app download can exceed any reasonable window. Tell the
@@ -37,16 +59,18 @@ def check_models():
             # manually (see README), then start anyway.
             print(f"WARNING: Model download failed ({e}).")
             print("Download the models manually and place them in the models/ folder, then restart.")
+        finally:
+            splash.close()
 
 
 def main():
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-    check_models()
-
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+
+    check_models(app)
 
     app_icon = load_app_icon()
     if not app_icon.isNull():

@@ -21,7 +21,7 @@ class HotkeyListener:
     def _handle_activate(self):
         print("Hotkey pressed: Activating voice input.")
         current = self.manager.state.current
-        if current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING, AppState.IDLE]:
+        if current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING, AppState.IDLE, AppState.ERROR]:
             if current == AppState.SPEAKING:
                 self.manager.interrupt()
             self.manager.activate_listening()

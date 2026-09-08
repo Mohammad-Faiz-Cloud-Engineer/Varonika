@@ -700,7 +700,7 @@ class ConversationManager:
         # Remove markdown links, keep text
         text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
         # Remove URLs
-        text = re.sub(r'https?://\S+', 'a link', text)
+        text = re.sub(r'https?://[^\s]+?(?=[.,;!?]?(\s|$))', 'a link', text)
         # Remove bullet points
         text = re.sub(r'^\s*[-*]\s+', '', text, flags=re.MULTILINE)
         # Collapse spaces and tabs, but keep newlines for TTS pacing
