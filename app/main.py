@@ -35,7 +35,7 @@ def check_models(app):
     app_icon = load_app_icon()
     splash = QSplashScreen(app_icon.pixmap(256, 256) if not app_icon.isNull() else None)
     splash.show()
-    splash.showMessage("Checking AI Models...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+    splash.showMessage("Checking...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
 
     error_holder: list[str] = []
     show_download_msg = [False]  # mutable container for cross-thread flag
