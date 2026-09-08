@@ -43,8 +43,8 @@ def download_file(url, destination, expected_hash=None):
     temp_path = Path(temp_path)
 
     try:
-        hash_sha256 = hashlib.sha256() if expected_hash else None
-        req = urllib.request.Request(url)
+        hash_sha256 = hashlib.sha256()
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Varonika/1.0'})
         with urllib.request.urlopen(req, timeout=60) as resp:
             total = int(resp.headers.get("Content-Length", 0))
             downloaded = 0
@@ -54,21 +54,21 @@ def download_file(url, destination, expected_hash=None):
                     if not chunk:
                         break
                     f.write(chunk)
-                    if hash_sha256:
-                        hash_sha256.update(chunk)
+                    hash_sha256.update(chunk)
                     downloaded += len(chunk)
                     if total > 0:
                         progress = min(100, downloaded * 100 // total)
                         sys.stdout.write(f"\rDownloading... {progress}%")
-                        sys.stdout.flush()
-        
+                    sys.stdout.flush()
+            print()
+            
+        file_hash = hash_sha256.hexdigest()
         if expected_hash:
-            actual_hash = hash_sha256.hexdigest()
-            if actual_hash.lower() != expected_hash.lower():
-                raise RuntimeError(f"Hash mismatch for {destination.name}. Expected {expected_hash}, got {actual_hash}")
+            if file_hash.lower() != expected_hash.lower():
+                raise RuntimeError(f"Hash mismatch for {destination.name}. Expected {expected_hash}, got {file_hash}")
 
         os.replace(temp_path, destination)
-        print("\nDownload complete.")
+        print("Download complete.")
     except Exception as e:
         temp_path.unlink(missing_ok=True)
         print(f"\nFailed to download {url}: {e}")

@@ -55,8 +55,9 @@ class STTEngine:
         self._transcribe_gen = 0
         self.audio_buffer = []
         self._buffered_samples = 0
-        self.last_speech_time = time.monotonic()
         self.speech_seen = False
+        self._loud_chunks = 0
+        self.last_speech_time = time.monotonic()
 
         # Calibration state
         self.is_calibrating = False
@@ -121,7 +122,12 @@ class STTEngine:
         with self._lock:
             if energy > self.energy_threshold:
                 self.last_speech_time = time.monotonic()
-                self.speech_seen = True
+                self._loud_chunks += 1
+                if self._loud_chunks >= 2:
+                    self.speech_seen = True
+            else:
+                # Decay loud chunks slowly to bridge small gaps
+                self._loud_chunks = max(0, self._loud_chunks - 1)
             # Silence before the first spoken chunk has no transcription value.
             # Keeping it made a hotkey activation with no speech grow forever.
             if not self.speech_seen:
@@ -149,6 +155,7 @@ class STTEngine:
                     self.audio_buffer = []
                     self._buffered_samples = 0
                     self.speech_seen = False
+                    self._loud_chunks = 0
                     self.last_speech_time = time.monotonic()
                     return None
 
@@ -159,6 +166,7 @@ class STTEngine:
                 self.audio_buffer = []
                 self._buffered_samples = 0
                 self.speech_seen = False
+                self._loud_chunks = 0
                 self.last_speech_time = time.monotonic()
                 my_gen = self._transcribe_gen
 
@@ -184,6 +192,7 @@ class STTEngine:
             self.audio_buffer = []
             self._buffered_samples = 0
             self.speech_seen = False
+            self._loud_chunks = 0
             self.last_speech_time = time.monotonic()
             self._transcribe_gen += 1
 

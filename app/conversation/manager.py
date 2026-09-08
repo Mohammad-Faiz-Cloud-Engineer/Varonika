@@ -13,6 +13,7 @@ from app.stt.whisper_engine import STTEngine
 from app.tts.kokoro_engine import TTSEngine
 from app.wakeword.detector import WakeWordDetector
 import contextlib
+import concurrent.futures
 
 
 class ConversationManager:
@@ -30,6 +31,8 @@ class ConversationManager:
     def __init__(self, config: Config, state_manager: StateManager):
         self.config = config
         self.state = state_manager
+
+        self._transcribe_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="STTWorker")
 
         self.audio = AudioCapture(chunk_size=1280, device_name=config.mic_device)
         self.wakeword = WakeWordDetector(config.wake_word_model, config.wake_word_threshold)
@@ -246,8 +249,23 @@ class ConversationManager:
 
             # Strip complete code blocks and inline code from the TTS buffer
             # so they don't mess up sentence splitting.
-            self._stream_buffer = re.sub(r'```[\s\S]*?```', " I've generated the code. ", self._stream_buffer)
-            self._stream_buffer = re.sub(r'`[^`]*`', " code snippet ", self._stream_buffer)
+            while True:
+                start_idx = self._stream_buffer.find('```')
+                if start_idx == -1:
+                    break
+                end_idx = self._stream_buffer.find('```', start_idx + 3)
+                if end_idx == -1:
+                    break
+                self._stream_buffer = self._stream_buffer[:start_idx] + " I've generated the code. " + self._stream_buffer[end_idx + 3:]
+
+            while True:
+                start_idx = self._stream_buffer.find('`')
+                if start_idx == -1:
+                    break
+                end_idx = self._stream_buffer.find('`', start_idx + 1)
+                if end_idx == -1:
+                    break
+                self._stream_buffer = self._stream_buffer[:start_idx] + " code snippet " + self._stream_buffer[end_idx + 1:]
 
             # Check if there is an open code block (starts with ``` but not closed)
             open_code_idx = self._stream_buffer.find('```')
@@ -257,7 +275,8 @@ class ConversationManager:
             else:
                 # Check for open inline code
                 open_inline_idx = self._stream_buffer.find('`')
-                if open_inline_idx != -1:
+                # If we've held an inline backtick for more than 200 chars, it's likely unclosed/rogue; stop holding
+                if open_inline_idx != -1 and len(self._stream_buffer) - open_inline_idx < 200:
                     safe_text = self._stream_buffer[:open_inline_idx]
                     unsafe_text = self._stream_buffer[open_inline_idx:]
                 else:
@@ -380,8 +399,13 @@ class ConversationManager:
         """Audio callback from the microphone: runs on the audio callback thread."""
         current = self.state.current
 
-        # Wake word detection during idle/wakeword listening, speaking, thinking, or executing tool
-        if current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING, AppState.THINKING, AppState.EXECUTING_TOOL]:
+        # Wake word detection during idle listening or while the assistant is
+        # busy (thinking/executing). It must NEVER run while TTS is speaking
+        # (speaker bleed would trigger it on her own voice).
+        is_talking = self.tts.is_speaking()
+
+        if (current in [AppState.LISTENING_FOR_WAKEWORD, AppState.SPEAKING,
+                        AppState.THINKING, AppState.EXECUTING_TOOL] and not is_talking):
             # Room-noise only: never while she is talking (speaker bleed
             # would raise the threshold and she would go deaf), and never
             # while the user is being transcribed (that used to hijack STT).
@@ -397,30 +421,35 @@ class ConversationManager:
                 self.tts.signal_answer_start()
                 self.tts.speak(random.choice(["Yes Boss", "Yes Sir"]))
                 self.tts.signal_answer_end()
+                
                 self.state.set_state(AppState.LISTENING)
                 self.stt.discard_calibration_progress()
                 self.stt.reset()
                 return
-            if (
-                self.stt.is_calibrating
-                and current == AppState.LISTENING_FOR_WAKEWORD
-                and not self.tts.is_speaking()
-            ):
-                self.stt.feed_calibration(chunk)
 
-            # Answer finished: once she actually stops talking, open the
-            # follow-up listening window. (She shows "Speaking" while the
-            # answer plays, not "Listening".) The in-flight flag keeps her
-            # in SPEAKING while a prompt is still streaming to TTS: between
-            # sentences the queue is legitimately empty, and flipping out of
-            # SPEAKING here would drop the remaining streamed chunks.
-            if (current == AppState.SPEAKING and not self.tts.is_speaking()
-                    and not self._answer_in_flight):
-                if self._follow_up_active:
-                    self.state.set_state(AppState.LISTENING)
-                    self.stt.reset()
-                else:
-                    self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
+        # Room-noise only: never while she is talking (speaker bleed
+        # would raise the threshold and she would go deaf), and never
+        # while the user is being transcribed (that used to hijack STT).
+        if (
+            self.stt.is_calibrating
+            and current == AppState.LISTENING_FOR_WAKEWORD
+            and not is_talking
+        ):
+            self.stt.feed_calibration(chunk)
+
+        # Answer finished: once she actually stops talking, open the
+        # follow-up listening window. (She shows "Speaking" while the
+        # answer plays, not "Listening".) The in-flight flag keeps her
+        # in SPEAKING while a prompt is still streaming to TTS: between
+        # sentences the queue is legitimately empty, and flipping out of
+        # SPEAKING here would drop the remaining streamed chunks.
+        if (current == AppState.SPEAKING and not self.tts.is_speaking()
+                and not self._answer_in_flight):
+            if self._follow_up_active:
+                self.state.set_state(AppState.LISTENING)
+                self.stt.reset()
+            else:
+                self.state.set_state(AppState.LISTENING_FOR_WAKEWORD)
 
         # STT during active listening
         if current == AppState.LISTENING:
@@ -447,10 +476,9 @@ class ConversationManager:
             if ready:
                 self.state.set_state(AppState.TRANSCRIBING)
                 # Whisper inference is slow: never run it on the audio callback
-                # thread. Daemon so a long transcribe cannot block process exit.
-                threading.Thread(
-                    target=self._transcribe_and_process, daemon=True
-                ).start()
+                # thread. Use a ThreadPoolExecutor with max_workers=1 to prevent
+                # unbounded thread creation and queued pileups.
+                self._transcribe_pool.submit(self._transcribe_and_process)
 
     def _transcribe_and_process(self):
         """Transcribe the buffered audio off the audio thread, then handle the command."""
@@ -709,6 +737,7 @@ class ConversationManager:
                 await self._active_task
         self.audio.close()
         self.tts.stop()
+        self._transcribe_pool.shutdown(wait=False)
         if self.hotkeys:
             self.hotkeys.stop()
         with contextlib.suppress(Exception):

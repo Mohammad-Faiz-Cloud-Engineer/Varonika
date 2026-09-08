@@ -1,7 +1,9 @@
 import asyncio
+import contextlib
 import os
 import subprocess
 import sys
+import threading
 
 import qasync
 from PySide6.QtWidgets import QApplication
@@ -17,50 +19,73 @@ from app.ui.main_window import MainWindow, load_app_icon
 
 
 def check_models(app):
-    """Ensure models are downloaded before starting."""
+    """Ensure models are downloaded before starting.
+
+    Runs the download script in a background thread so the Qt event loop
+    stays responsive and the splash screen can repaint smoothly.
+    """
     scripts_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
     dl_script = os.path.join(scripts_dir, "download_models.py")
-    if os.path.exists(dl_script):
-        print("Checking models...")
-        
-        from PySide6.QtWidgets import QSplashScreen
-        from PySide6.QtCore import Qt
-        import time
-        
-        app_icon = load_app_icon()
-        splash = QSplashScreen(app_icon.pixmap(256, 256) if not app_icon.isNull() else None)
-        splash.show()
-        splash.showMessage("Checking AI Models...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
-        app.processEvents()
-        
+    if not os.path.exists(dl_script):
+        return
+
+    from PySide6.QtWidgets import QSplashScreen
+    from PySide6.QtCore import Qt
+
+    app_icon = load_app_icon()
+    splash = QSplashScreen(app_icon.pixmap(256, 256) if not app_icon.isNull() else None)
+    splash.show()
+    splash.showMessage("Checking AI Models...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+
+    error_holder: list[str] = []
+    show_download_msg = [False]  # mutable container for cross-thread flag
+
+    def _run_download():
+        import time as _time
         try:
             process = subprocess.Popen([sys.executable, dl_script])
-            start_time = time.time()
+            start_time = _time.time()
             while process.poll() is None:
-                app.processEvents()
-                time.sleep(0.05)
-                if time.time() - start_time > 2.0:
-                    splash.showMessage("Downloading AI Models (this may take a few minutes)...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
-                if time.time() - start_time > 1800:
+                _time.sleep(0.1)
+                elapsed = _time.time() - start_time
+                if 2.0 < elapsed <= 1800:
+                    show_download_msg[0] = True
+                elif elapsed > 1800:
                     process.kill()
-                    raise subprocess.TimeoutExpired(process.args, 1800)
+                    error_holder.append("timeout")
+                    return
             if process.returncode != 0:
-                print(f"WARNING: Model download script exited with code {process.returncode}")
-        except subprocess.TimeoutExpired:
-            # The Whisper model alone is ~487 MB: on a slow connection the
-            # in-app download can exceed any reasonable window. Tell the
-            # user to run the script manually (no cap there) instead of
-            # silently starting with a broken speech-to-text.
+                error_holder.append(f"exit {process.returncode}")
+        except Exception as e:
+            error_holder.append(str(e))
+
+    dl_thread = threading.Thread(target=_run_download, daemon=True)
+    dl_thread.start()
+
+    # Keep the splash alive while the download thread runs.
+    # app.processEvents() lets the splash repaint; a 50ms sleep prevents burning CPU.
+    import time
+    while dl_thread.is_alive():
+        if show_download_msg[0]:
+            show_download_msg[0] = False
+            splash.showMessage(
+                "Downloading AI Models (this may take a few minutes)...",
+                Qt.AlignBottom | Qt.AlignCenter,
+                Qt.white,
+            )
+        app.processEvents()
+        time.sleep(0.05)
+
+    splash.close()
+
+    if error_holder:
+        reason = error_holder[0]
+        if reason == "timeout":
             print("WARNING: Model download timed out (slow or interrupted connection).")
             print("Run 'python scripts/download_models.py' in a terminal, wait for it to finish, then restart.")
-        except Exception as e:
-            # A failed download (no network, blocked site) must not crash the
-            # app or block startup: warn and let the user place the models
-            # manually (see README), then start anyway.
-            print(f"WARNING: Model download failed ({e}).")
+        else:
+            print(f"WARNING: Model download failed ({reason}).")
             print("Download the models manually and place them in the models/ folder, then restart.")
-        finally:
-            splash.close()
 
 
 def main():

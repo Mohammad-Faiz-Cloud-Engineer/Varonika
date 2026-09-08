@@ -46,7 +46,11 @@ class VaronikaBrain(QWidget):
         painter.setClipPath(path)
         painter.fillRect(self.rect(), QColor(10, 10, 15))
 
-        self.time += 0.05
+        # Wrap time at 2*pi to prevent float degradation. Since it's only used 
+        # internally for sin(time * 2), wrapping at 2*pi is mathematically seamless.
+        self.time = (self.time + 0.05) % (math.pi * 2)
+        if not hasattr(self, 'phase'):
+            self.phase = 0.0
 
         # Determine colors and activity based on state
         color = QColor(0, 150, 255) # Default blue
@@ -70,10 +74,14 @@ class VaronikaBrain(QWidget):
             pulse_speed = 3.0
         elif self.state == AppState.SPEAKING:
             color = QColor(0, 200, 255)
-            pulse_speed = max(1, int(2.0 + math.sin(self.time * 2) * 1.5))
+            # Remove int() quantization to prevent phase jitter/stuttering
+            pulse_speed = max(1.0, 2.0 + math.sin(self.time * 2) * 1.5)
         elif self.state == AppState.ERROR:
             color = QColor(255, 0, 0)
             pulse_speed = 0.5
+
+        # Properly integrate phase to prevent wild tearing when pulse_speed changes
+        self.phase = (self.phase + 0.05 * pulse_speed) % (math.pi * 2)
 
         w, h = self.width(), self.height()
         center_x, center_y = w / 2, h / 2
@@ -86,8 +94,8 @@ class VaronikaBrain(QWidget):
         # Dynamic node positions
         active_nodes = []
         for nx, ny in self.nodes:
-            dx = math.sin(self.time * pulse_speed + nx * 10) * 20
-            dy = math.cos(self.time * pulse_speed + ny * 10) * 20
+            dx = math.sin(self.phase + nx * 10) * 20
+            dy = math.cos(self.phase + ny * 10) * 20
             px = center_x + (nx - 0.5) * w * 0.8 + dx
             py = center_y + (ny - 0.5) * h * 0.8 + dy
             active_nodes.append((px, py))

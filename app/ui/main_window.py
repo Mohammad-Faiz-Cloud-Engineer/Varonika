@@ -1,3 +1,4 @@
+import contextlib
 import html
 import threading
 import time
@@ -60,6 +61,7 @@ class MainWindow(QMainWindow):
     def __init__(self, manager):
         super().__init__()
         self.manager = manager
+        self._is_turn_active = False
         self.setWindowTitle("Varonika")
         self.resize(900, 550)
 
