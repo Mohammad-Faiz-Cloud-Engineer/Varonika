@@ -521,6 +521,10 @@ class MainWindow(QMainWindow):
             self._append_chat_block(
                 f'<span style="color:#888;">{html.escape(message)}</span>'
             )
+        elif source == "Todo":
+            self._append_chat_block(
+                f'<span style="color:#888;">{message}</span>'
+            )
 
         force_scroll = source == "User"
         if at_bottom or force_scroll:

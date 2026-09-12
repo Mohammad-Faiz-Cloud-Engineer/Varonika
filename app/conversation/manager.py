@@ -1,4 +1,5 @@
 import asyncio
+import html
 import random
 import re
 import threading
@@ -348,6 +349,16 @@ class ConversationManager:
             return
         if self.opencode.stream_seq != self._request_seq:
             return
+
+        # Handle todowrite tool specifically - display inline in chat
+        if title and "todowrite" in title.lower():
+            if raw_input and "todos" in raw_input:
+                todos = raw_input["todos"]
+                if todos:
+                    msg = self._format_todo_message(todos)
+                    self._emit_ui("Todo", msg)
+            return
+
         # Only emit the first in_progress update per tool call.
         # The first ToolCallProgress carries the real data (command, file path).
         # Subsequent in_progress updates repeat the same data.
@@ -360,6 +371,25 @@ class ConversationManager:
         if desc:
             self.state.set_state(AppState.EXECUTING_TOOL)
             self._emit_ui("System", desc)
+
+    @staticmethod
+    def _format_todo_message(todos: list[dict]) -> str:
+        """Format a todo list as a readable inline message."""
+        lines = ["", "<b>Tasks:</b>"]
+        for todo in todos:
+            content = html.escape(todo.get("content", ""))
+            status = todo.get("status", "pending")
+            priority = todo.get("priority", "medium")
+            if status == "completed":
+                marker = "[x]"
+            elif status == "in_progress":
+                marker = "[>]"
+            else:
+                marker = "[ ]"
+            priority_tag = f" ({priority})" if priority != "medium" else ""
+            lines.append(f"{marker} {content}{priority_tag}")
+        lines.append("")
+        return "<br>".join(lines)
 
     @staticmethod
     def _tool_description_from_progress(
