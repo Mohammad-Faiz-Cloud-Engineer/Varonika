@@ -106,13 +106,8 @@ class VaronikaClient:
     ) -> ReadTextFileResponse:
         """Read a file slice. ACP `line` is 1-based; `limit` is a line count, not bytes."""
         try:
-            base_dir = Path(BASE_DIR).resolve()
-            resolved_path = Path(path).resolve()
-            if not resolved_path.is_relative_to(base_dir):
-                raise RequestError(1, f"Path '{path}' is outside the workspace '{base_dir}'.")
-
             start = line if (line is not None and line > 0) else 1
-            with open(resolved_path, encoding="utf-8", errors="replace") as f:
+            with open(path, encoding="utf-8", errors="replace") as f:
                 if start == 1 and limit is None:
                     content = f.read()
                 else:
@@ -126,23 +121,18 @@ class VaronikaClient:
                     content = "".join(rows)
             return ReadTextFileResponse(content=content)
         except Exception as e:
-            raise RequestError(1, f"Error reading file: {e}") from e
+            return ReadTextFileResponse(content=f"Error reading file: {e}")
 
     async def write_text_file(self, content: str, path: str, session_id: str, **kwargs: Any) -> WriteTextFileResponse | None:
         try:
-            base_dir = Path(BASE_DIR).resolve()
-            resolved_path = Path(path).resolve()
-            if not resolved_path.is_relative_to(base_dir):
-                raise RequestError(1, f"Path '{path}' is outside the workspace '{base_dir}'.")
-
-            dirname = os.path.dirname(resolved_path)
+            dirname = os.path.dirname(path)
             if dirname:
                 os.makedirs(dirname, exist_ok=True)
-            with open(resolved_path, "w", encoding="utf-8") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
             return WriteTextFileResponse()
         except Exception as e:
-            raise RequestError(1, f"Failed to write file: {e}") from e
+            raise Exception(f"Failed to write file: {e}") from e
 
     async def create_terminal(self, command: str, session_id: str, **kwargs: Any) -> CreateTerminalResponse:
         # Terminals are not supported: tell the agent with a proper JSON-RPC
