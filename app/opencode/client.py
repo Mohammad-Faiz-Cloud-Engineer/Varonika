@@ -599,15 +599,14 @@ class OpenCodeClient:
             prompt_text = text
             if not self._session_prompt_count:
                 prompt_text = (
-                    "Before giving the answer to my query, first use the "
-                    "read tool to read the file AGENTS.md from the project "
-                    "root. Read it word by word, line by line. It contains "
-                    "your identity, your task flow, your hard rules, and "
-                    "your behaviour instructions. You MUST follow every "
-                    "single instruction in that file for ALL responses in "
-                    "this session. This is mandatory. After you have read "
-                    "and understood AGENTS.md, then answer my message "
-                    "below.\n\n"
+                    "Before answering, you MUST first use the read tool to "
+                    "read the file AGENTS.md from the project root. Read it "
+                    "completely, line by line. This file contains your identity, "
+                    "task flow, hard rules, and behaviour instructions. You MUST "
+                    "follow every instruction in that file for ALL responses in "
+                    "this session. This is mandatory. Do NOT answer until you "
+                    "have read AGENTS.md. After you have read and understood "
+                    "AGENTS.md, then answer my message below.\n\n"
                     + text
                 )
             self._session_prompt_count += 1
